@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from functools import lru_cache
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+_BASE_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(_BASE_DIR / ".env")
+
+
+def _parse_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_name: str
+    app_env: str
+    cors_origins: list[str]
+    map_cache_ttl_seconds: int
+    player_cache_ttl_seconds: int
+    player_cache_redis_url: str | None
+    request_timeout_seconds: float
+    timezone: str
+    bootstrap_browser: bool
+    debug: bool
+    cf_clearance: str | None
+    php_sessid: str | None
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    cors_origins = _parse_csv(os.getenv("CORS_ORIGINS"))
+    if not cors_origins:
+        cors_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+
+    return Settings(
+        app_name=os.getenv("APP_NAME", "KoG Team Planner API"),
+        app_env=os.getenv("APP_ENV", "development"),
+        cors_origins=cors_origins,
+        map_cache_ttl_seconds=int(os.getenv("MAP_CACHE_TTL_SECONDS", "21600")),
+        player_cache_ttl_seconds=int(os.getenv("PLAYER_CACHE_TTL_SECONDS", "1800")),
+        player_cache_redis_url=(
+            os.getenv("PLAYER_CACHE_REDIS_URL") or os.getenv("REDIS_URL")
+        ),
+        request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),
+        timezone=os.getenv("KOG_TIMEZONE", "UTC"),
+        bootstrap_browser=_parse_bool(os.getenv("KOG_BOOTSTRAP_BROWSER"), False),
+        debug=_parse_bool(os.getenv("DEBUG"), False),
+        cf_clearance=os.getenv("KOG_CF_CLEARANCE"),
+        php_sessid=os.getenv("KOG_PHPSESSID"),
+    )

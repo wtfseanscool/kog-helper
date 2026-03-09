@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: kog-team-planner-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    autoDeploy: true
+    buildCommand: PLAYWRIGHT_BROWSERS_PATH=0 pip install -r requirements.txt && PLAYWRIGHT_BROWSERS_PATH=0 python -m playwright install chromium
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: KOG_TIMEZONE
+        value: UTC
+      - key: MAP_CACHE_TTL_SECONDS
+        value: "21600"
+      - key: PLAYER_CACHE_TTL_SECONDS
+        value: "1800"
+      - key: PLAYER_CACHE_REDIS_URL
+        sync: false
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: "30"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: KOG_CF_CLEARANCE
+        sync: false
+      - key: KOG_PHPSESSID
+        sync: false
+      - key: KOG_BOOTSTRAP_BROWSER
+        sync: false
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
