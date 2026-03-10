@@ -38,6 +38,16 @@ class Settings:
     debug: bool
     cf_clearance: str | None
     php_sessid: str | None
+    frontend_base_url: str
+    auth_redirect_base_url: str | None
+    auth_secret_key: str
+    auth_session_ttl_seconds: int
+    auth_cookie_secure: bool
+    auth_db_path: str
+    google_client_id: str | None
+    google_client_secret: str | None
+    discord_client_id: str | None
+    discord_client_secret: str | None
 
 
 @lru_cache(maxsize=1)
@@ -64,4 +74,20 @@ def get_settings() -> Settings:
         debug=_parse_bool(os.getenv("DEBUG"), False),
         cf_clearance=os.getenv("KOG_CF_CLEARANCE"),
         php_sessid=os.getenv("KOG_PHPSESSID"),
+        frontend_base_url=os.getenv(
+            "FRONTEND_BASE_URL", "http://127.0.0.1:5173"
+        ).rstrip("/"),
+        auth_redirect_base_url=(os.getenv("AUTH_REDIRECT_BASE_URL") or "").rstrip("/")
+        or None,
+        auth_secret_key=os.getenv(
+            "AUTH_SECRET_KEY", "dev-insecure-auth-secret-change-me"
+        ),
+        auth_session_ttl_seconds=int(os.getenv("AUTH_SESSION_TTL_SECONDS", "2592000")),
+        auth_cookie_secure=_parse_bool(os.getenv("AUTH_COOKIE_SECURE"), False),
+        auth_db_path=os.getenv("AUTH_DB_PATH", str(_BASE_DIR / "data" / "auth.db")),
+        google_client_id=(os.getenv("GOOGLE_CLIENT_ID") or "").strip() or None,
+        google_client_secret=(os.getenv("GOOGLE_CLIENT_SECRET") or "").strip() or None,
+        discord_client_id=(os.getenv("DISCORD_CLIENT_ID") or "").strip() or None,
+        discord_client_secret=(os.getenv("DISCORD_CLIENT_SECRET") or "").strip()
+        or None,
     )

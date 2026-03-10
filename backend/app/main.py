@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
+from urllib.parse import quote_plus
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Cookie, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
-from app.models import TeamCommonRequest, TeamRandomRequest
+from app.models import ProfileUpdateRequest, TeamCommonRequest, TeamRandomRequest
+from app.services.auth import AuthError, AuthService
+from app.services.auth_store import AuthStore
 from app.services.kog_client import KoGApiClient, KoGApiError
 from app.services.map_catalog import MapCatalogService
 from app.services.planner import TeamPlannerService
@@ -35,6 +39,12 @@ planner_service = TeamPlannerService(
     map_catalog=map_catalog_service,
 )
 
+auth_store = AuthStore(db_path=settings.auth_db_path)
+auth_service = AuthService(settings=settings, store=auth_store)
+
+AUTH_SESSION_COOKIE = "kog_session"
+AUTH_STATE_COOKIE = "kog_oauth_state"
+
 
 app = FastAPI(title=settings.app_name)
 
@@ -48,15 +58,15 @@ app.add_middleware(
 
 
 def _player_summary(data: dict[str, Any]) -> dict[str, Any]:
-    points = data.get("points") if isinstance(data.get("points"), dict) else {}
-    finished = (
-        data.get("finishedMaps") if isinstance(data.get("finishedMaps"), list) else []
-    )
-    unfinished = (
-        data.get("unfinishedMaps")
-        if isinstance(data.get("unfinishedMaps"), list)
-        else []
-    )
+    raw_points = data.get("points")
+    points = raw_points if isinstance(raw_points, dict) else {}
+
+    raw_finished = data.get("finishedMaps")
+    finished = raw_finished if isinstance(raw_finished, list) else []
+
+    raw_unfinished = data.get("unfinishedMaps")
+    unfinished = raw_unfinished if isinstance(raw_unfinished, list) else []
+
     return {
         "rank": points.get("Rank"),
         "name": points.get("Name"),
@@ -67,12 +77,39 @@ def _player_summary(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _handle_error(exc: Exception) -> None:
+def _handle_error(exc: Exception) -> NoReturn:
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if isinstance(exc, KoGApiError):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _set_auth_session_cookie(response: Response, session_token: str) -> None:
+    response.set_cookie(
+        key=AUTH_SESSION_COOKIE,
+        value=session_token,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        max_age=max(3600, settings.auth_session_ttl_seconds),
+        path="/",
+    )
+
+
+def _clear_auth_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=AUTH_SESSION_COOKIE,
+        path="/",
+        samesite="lax",
+    )
+
+
+def _get_current_user_or_401(session_token: str | None):
+    user = auth_service.get_user_from_session(session_token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
 
 
 @app.get("/health")
@@ -84,6 +121,181 @@ def health() -> dict[str, Any]:
         "map_catalog": map_catalog_service.cache_info(),
         "player_cache": kog_client.player_cache_info(),
     }
+
+
+@app.get("/api/auth/providers")
+def auth_providers() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "providers": auth_service.enabled_providers(),
+    }
+
+
+@app.get("/api/auth/me")
+def auth_me(
+    session_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE),
+) -> dict[str, Any]:
+    user = auth_service.get_user_from_session(session_token)
+    if user is None:
+        return {
+            "status": "ok",
+            "authenticated": False,
+            "user": None,
+        }
+
+    return {
+        "status": "ok",
+        "authenticated": True,
+        "user": user.as_dict(),
+    }
+
+
+@app.post("/api/auth/profile")
+def auth_profile_update(
+    payload: ProfileUpdateRequest,
+    session_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE),
+) -> dict[str, Any]:
+    user = _get_current_user_or_401(session_token)
+    try:
+        updated_user = auth_service.update_kog_name(
+            user_id=user.id,
+            kog_name=payload.kog_name,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "ok",
+        "user": updated_user.as_dict(),
+    }
+
+
+@app.post("/api/auth/logout")
+def auth_logout(response: Response) -> dict[str, Any]:
+    _clear_auth_session_cookie(response)
+    return {
+        "status": "ok",
+    }
+
+
+@app.get("/api/auth/google/start")
+def auth_google_start(
+    request: Request,
+    next: str | None = Query(default=None),
+) -> RedirectResponse:
+    try:
+        authorize_url, state_token = auth_service.start_login(
+            provider="google",
+            request=request,
+            next_url=next,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    response = RedirectResponse(url=authorize_url, status_code=302)
+    response.set_cookie(
+        key=AUTH_STATE_COOKIE,
+        value=state_token,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        max_age=600,
+        path="/",
+    )
+    return response
+
+
+@app.get("/api/auth/discord/start")
+def auth_discord_start(
+    request: Request,
+    next: str | None = Query(default=None),
+) -> RedirectResponse:
+    try:
+        authorize_url, state_token = auth_service.start_login(
+            provider="discord",
+            request=request,
+            next_url=next,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    response = RedirectResponse(url=authorize_url, status_code=302)
+    response.set_cookie(
+        key=AUTH_STATE_COOKIE,
+        value=state_token,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        max_age=600,
+        path="/",
+    )
+    return response
+
+
+@app.get("/api/auth/google/callback", name="auth_google_callback")
+def auth_google_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+    oauth_state: str | None = Cookie(default=None, alias=AUTH_STATE_COOKIE),
+) -> RedirectResponse:
+    try:
+        _user, session_token, next_url = auth_service.finish_login(
+            provider="google",
+            request=request,
+            code=code,
+            state=state,
+            state_token=oauth_state,
+        )
+        response = RedirectResponse(url=next_url, status_code=302)
+        _set_auth_session_cookie(response, session_token)
+    except AuthError as exc:
+        fallback = (
+            f"{settings.frontend_base_url}/?auth=error&reason="
+            f"{quote_plus(str(exc)[:140])}"
+        )
+        response = RedirectResponse(url=fallback, status_code=302)
+        _clear_auth_session_cookie(response)
+
+    response.delete_cookie(
+        key=AUTH_STATE_COOKIE,
+        path="/",
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/api/auth/discord/callback", name="auth_discord_callback")
+def auth_discord_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+    oauth_state: str | None = Cookie(default=None, alias=AUTH_STATE_COOKIE),
+) -> RedirectResponse:
+    try:
+        _user, session_token, next_url = auth_service.finish_login(
+            provider="discord",
+            request=request,
+            code=code,
+            state=state,
+            state_token=oauth_state,
+        )
+        response = RedirectResponse(url=next_url, status_code=302)
+        _set_auth_session_cookie(response, session_token)
+    except AuthError as exc:
+        fallback = (
+            f"{settings.frontend_base_url}/?auth=error&reason="
+            f"{quote_plus(str(exc)[:140])}"
+        )
+        response = RedirectResponse(url=fallback, status_code=302)
+        _clear_auth_session_cookie(response)
+
+    response.delete_cookie(
+        key=AUTH_STATE_COOKIE,
+        path="/",
+        samesite="lax",
+    )
+    return response
 
 
 @app.get("/api/player/{player_name}")

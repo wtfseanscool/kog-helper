@@ -49,6 +49,47 @@ export interface TeamMapEntry {
   metadata_found: boolean;
 }
 
+export interface MapCatalogEntry {
+  name: string;
+  stars: number | null;
+  difficulty: string | null;
+  points: number | null;
+  author: string | null;
+  released_at: string | null;
+}
+
+export interface MapCatalogResponse {
+  status: "ok";
+  count: number;
+  maps: MapCatalogEntry[];
+}
+
+export interface AuthUser {
+  id: number;
+  provider: string;
+  email: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  kog_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthMeResponse {
+  status: "ok";
+  authenticated: boolean;
+  user: AuthUser | null;
+}
+
+export interface AuthProvidersResponse {
+  status: "ok";
+  providers: string[];
+}
+
+export interface AuthProfileUpdatePayload {
+  kog_name: string;
+}
+
 export interface TeamCommonRequestPayload {
   players?: string[];
   players_text?: string;

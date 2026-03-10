@@ -8,6 +8,7 @@ venv/
 
 # Backend env files
 backend/.env
+backend/data/
 
 # Frontend
 frontend/node_modules/

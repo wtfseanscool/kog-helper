@@ -8,21 +8,20 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   FormControl,
-  FormControlLabel,
-  Grid,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Snackbar,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { MapResultsTable } from "../../components/MapResultsTable";
 import { fetchTeamCommon, fetchTeamRandom } from "../../lib/api";
 import type {
@@ -31,7 +30,7 @@ import type {
   TeamRandomRequestPayload,
 } from "../../lib/types";
 
-const DIFFICULTIES = ["", "Easy", "Main", "Hard", "Insane", "Extreme"];
+const DIFFICULTIES = ["", "Easy", "Main", "Hard", "Insane", "Extreme", "Mod"];
 const DEFAULT_DELIMITER = ",";
 
 type ToastState = {
@@ -39,22 +38,15 @@ type ToastState = {
   message: string;
 } | null;
 
+type TeamPlannerPanelProps = {
+  isActive?: boolean;
+};
+
 function getQueryParam(name: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
   return new URLSearchParams(window.location.search).get(name);
-}
-
-function parsePositiveInt(value: string | null, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback;
-  }
-  return Math.floor(parsed);
 }
 
 function parseStars(value: string | null): string {
@@ -64,11 +56,12 @@ function parseStars(value: string | null): string {
   return ["1", "2", "3", "4", "5"].includes(value) ? value : "";
 }
 
-function parseBoolean(value: string | null, fallback: boolean): boolean {
-  if (value === null) {
-    return fallback;
-  }
-  return value === "1" || value.toLowerCase() === "true";
+function getEffectiveDelimiter(value: string): string {
+  return value || DEFAULT_DELIMITER;
+}
+
+function isNewlineDelimiter(value: string): boolean {
+  return value === "\\n" || value.toLowerCase() === "newline" || value === "\n";
 }
 
 function toCsvCell(value: unknown): string {
@@ -131,7 +124,8 @@ async function copyText(text: string): Promise<void> {
   textarea.remove();
 }
 
-export function TeamPlannerPanel() {
+function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
+  const playersInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const [playersText, setPlayersText] = useState(() => getQueryParam("players") ?? "");
   const [delimiter, setDelimiter] = useState(
     () => getQueryParam("delimiter") ?? DEFAULT_DELIMITER,
@@ -141,13 +135,9 @@ export function TeamPlannerPanel() {
     return DIFFICULTIES.includes(value) ? value : "";
   });
   const [stars, setStars] = useState(() => parseStars(getQueryParam("stars")));
-  const [includeUnknownMetadata, setIncludeUnknownMetadata] = useState(() =>
-    parseBoolean(getQueryParam("includeUnknown"), true),
-  );
-  const [randomCount, setRandomCount] = useState(() =>
-    parsePositiveInt(getQueryParam("count"), 1),
-  );
-  const [seed, setSeed] = useState(() => getQueryParam("seed") ?? "");
+  const includeUnknownMetadata = true;
+  const [playersValidationMessage, setPlayersValidationMessage] = useState<string | null>(null);
+  const [lastRequestedAction, setLastRequestedAction] = useState<"common" | "random" | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
   const commonMutation = useMutation({
@@ -163,9 +153,9 @@ export function TeamPlannerPanel() {
       return [];
     }
 
-    const splitDelimiter = delimiter || DEFAULT_DELIMITER;
+    const splitDelimiter = getEffectiveDelimiter(delimiter);
     const chunks =
-      splitDelimiter === "\\n" || splitDelimiter === "newline"
+      isNewlineDelimiter(splitDelimiter)
         ? playersText.split(/\r?\n/)
         : playersText.split(splitDelimiter);
 
@@ -186,8 +176,19 @@ export function TeamPlannerPanel() {
     return cleaned;
   }, [playersText, delimiter]);
 
+  const playersPlaceholder = useMemo(() => {
+    const sampleNames = ["player1", "player2", "player3"];
+    const effectiveDelimiter = getEffectiveDelimiter(delimiter);
+
+    if (isNewlineDelimiter(effectiveDelimiter)) {
+      return sampleNames.join("\n");
+    }
+
+    return sampleNames.join(effectiveDelimiter);
+  }, [delimiter]);
+
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !isActive) {
       return;
     }
 
@@ -218,25 +219,18 @@ export function TeamPlannerPanel() {
       params.delete("stars");
     }
 
-    params.set("includeUnknown", includeUnknownMetadata ? "1" : "0");
-    params.set("count", String(Math.max(1, randomCount)));
-
-    if (seed.trim()) {
-      params.set("seed", seed.trim());
-    } else {
-      params.delete("seed");
-    }
+    params.delete("includeUnknown");
+    params.delete("count");
+    params.delete("seed");
 
     const query = params.toString();
     const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
     window.history.replaceState({}, "", nextUrl);
   }, [
+    isActive,
     delimiter,
     difficulty,
-    includeUnknownMetadata,
     playersText,
-    randomCount,
-    seed,
     stars,
   ]);
 
@@ -247,6 +241,14 @@ export function TeamPlannerPanel() {
   const activeErrorMessage = activeError instanceof Error ? activeError.message : null;
 
   const isBusy = commonMutation.isPending || randomMutation.isPending;
+  const isFindingCommon = commonMutation.isPending;
+  const isFindingRandom = randomMutation.isPending;
+
+  useEffect(() => {
+    if (playerPreview.length > 0 && playersValidationMessage) {
+      setPlayersValidationMessage(null);
+    }
+  }, [playerPreview, playersValidationMessage]);
 
   const buildPayload = (): TeamCommonRequestPayload => {
     const starsValue = stars.trim() === "" ? null : Number(stars);
@@ -260,17 +262,29 @@ export function TeamPlannerPanel() {
   };
 
   const runCommon = () => {
+    if (playerPreview.length === 0) {
+      setPlayersValidationMessage("Add at least one player name before searching.");
+      playersInputRef.current?.focus();
+      return;
+    }
+
+    setLastRequestedAction("common");
     randomMutation.reset();
     commonMutation.mutate(buildPayload());
   };
 
   const runRandom = () => {
+    if (playerPreview.length === 0) {
+      setPlayersValidationMessage("Add at least one player name before selecting a random map.");
+      playersInputRef.current?.focus();
+      return;
+    }
+
+    setLastRequestedAction("random");
     commonMutation.reset();
-    const parsedSeed = seed.trim() ? Number(seed) : null;
     const payload: TeamRandomRequestPayload = {
       ...buildPayload(),
-      count: Math.max(1, randomCount),
-      seed: parsedSeed !== null && Number.isFinite(parsedSeed) ? parsedSeed : null,
+      count: 1,
     };
     randomMutation.mutate(payload);
   };
@@ -319,128 +333,126 @@ export function TeamPlannerPanel() {
     }
   };
 
+  const handleRetryLastRequest = () => {
+    if (lastRequestedAction === "random") {
+      runRandom();
+      return;
+    }
+
+    runCommon();
+  };
+
   return (
-    <Stack spacing={2.5}>
-      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
-        <Stack spacing={2}>
+    <Stack spacing={{ xs: 1.5, sm: 1.6, md: 1.75 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6 }}>
+        <Stack spacing={{ xs: 1.1, sm: 1.2, md: 1.25 }}>
           <TextField
             multiline
-            minRows={4}
+            minRows={3}
+            inputRef={playersInputRef}
             value={playersText}
             onChange={(event) => setPlayersText(event.target.value)}
             label="Team players"
-            placeholder="player1, player2, player3"
-            helperText="Use your delimiter to separate player names."
+            placeholder={playersPlaceholder}
+            error={Boolean(playersValidationMessage)}
+            helperText={playersValidationMessage ?? "Use your delimiter to separate player names."}
           />
 
-          <Grid container spacing={1.4}>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                value={delimiter}
-                onChange={(event) => setDelimiter(event.target.value)}
-                label="Delimiter"
-                helperText="Default: comma (,)"
-                fullWidth
-              />
-            </Grid>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={{ xs: 0.8, sm: 0.9 }}
+            useFlexGap
+            flexWrap="wrap"
+          >
+            <TextField
+              size="small"
+              value={delimiter}
+              onChange={(event) => setDelimiter(event.target.value)}
+              label="Delimiter"
+              helperText="Default: comma (,)"
+              sx={{ width: { xs: "100%", sm: 150 } }}
+            />
 
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel id="difficulty-label">Difficulty</InputLabel>
-                <Select
-                  labelId="difficulty-label"
-                  value={difficulty}
-                  label="Difficulty"
-                  onChange={(event) => setDifficulty(event.target.value)}
-                >
-                  {DIFFICULTIES.map((entry) => (
-                    <MenuItem key={entry || "any"} value={entry}>
-                      {entry || "Any"}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 170 } }}>
+              <InputLabel id="difficulty-label">Difficulty</InputLabel>
+              <Select
+                labelId="difficulty-label"
+                value={difficulty}
+                label="Difficulty"
+                onChange={(event) => setDifficulty(event.target.value)}
+              >
+                {DIFFICULTIES.map((entry) => (
+                  <MenuItem key={entry || "any"} value={entry}>
+                    {entry || "Any"}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel id="stars-label">Stars</InputLabel>
-                <Select
-                  labelId="stars-label"
-                  value={stars}
-                  label="Stars"
-                  onChange={(event) => setStars(event.target.value)}
-                >
-                  <MenuItem value="">Any</MenuItem>
-                  <MenuItem value="1">1</MenuItem>
-                  <MenuItem value="2">2</MenuItem>
-                  <MenuItem value="3">3</MenuItem>
-                  <MenuItem value="4">4</MenuItem>
-                  <MenuItem value="5">5</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+            <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 120 } }}>
+              <InputLabel id="stars-label">Stars</InputLabel>
+              <Select
+                labelId="stars-label"
+                value={stars}
+                label="Stars"
+                onChange={(event) => setStars(event.target.value)}
+              >
+                <MenuItem value="">Any</MenuItem>
+                <MenuItem value="1">1</MenuItem>
+                <MenuItem value="2">2</MenuItem>
+                <MenuItem value="3">3</MenuItem>
+                <MenuItem value="4">4</MenuItem>
+                <MenuItem value="5">5</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
 
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                type="number"
-                inputProps={{ min: 1, max: 100 }}
-                value={randomCount}
-                onChange={(event) => setRandomCount(parsePositiveInt(event.target.value, 1))}
-                label="Random count"
-                fullWidth
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                value={seed}
-                onChange={(event) => setSeed(event.target.value)}
-                label="Seed (optional)"
-                placeholder="2026"
-                fullWidth
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={includeUnknownMetadata}
-                    onChange={(event) => setIncludeUnknownMetadata(event.target.checked)}
-                  />
-                }
-                label="Include maps with missing metadata"
-                sx={{ mt: 1 }}
-              />
-            </Grid>
-          </Grid>
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.8, sm: 0.9 }}>
             <Button
               variant="contained"
-              startIcon={<FilterAltRounded />}
-              disabled={isBusy || playerPreview.length === 0}
+              startIcon={isFindingCommon ? <CircularProgress color="inherit" size={14} /> : <FilterAltRounded />}
+              disabled={isBusy}
               onClick={runCommon}
+              size="small"
+              sx={{ width: { xs: "100%", sm: "auto" } }}
             >
               Find Common Unfinished
             </Button>
             <Button
               variant="outlined"
-              startIcon={<CasinoRounded />}
-              disabled={isBusy || playerPreview.length === 0}
+              startIcon={isFindingRandom ? <CircularProgress color="inherit" size={14} /> : <CasinoRounded />}
+              disabled={isBusy}
               onClick={runRandom}
+              size="small"
+              sx={{ width: { xs: "100%", sm: "auto" } }}
             >
               Random Pick
             </Button>
-            <Button variant="text" startIcon={<LinkRounded />} onClick={handleCopyShareLink}>
+            <Button
+              variant="text"
+              startIcon={<LinkRounded />}
+              onClick={handleCopyShareLink}
+              size="small"
+              sx={{ width: { xs: "100%", sm: "auto" } }}
+            >
               Copy Share Link
             </Button>
           </Stack>
+
+          {isBusy && (
+            <Alert
+              severity="info"
+              icon={<CircularProgress size={16} color="inherit" />}
+            >
+              {isFindingRandom
+                ? "Selecting one random map from the shared unfinished list..."
+                : "Finding shared unfinished maps for your team..."}
+            </Alert>
+          )}
         </Stack>
       </Paper>
 
-      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2.5 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 1.1, sm: 1.2, md: 1.25 }, borderRadius: 1.4 }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <GroupAddRounded fontSize="small" color="primary" />
           <Typography variant="body2" color="text.secondary">
@@ -450,12 +462,12 @@ export function TeamPlannerPanel() {
             <Box
               key={name}
               sx={{
-                px: 1,
-                py: 0.4,
-                borderRadius: 999,
+                px: 0.9,
+                py: 0.35,
+                borderRadius: "10px",
                 fontSize: 12,
                 fontWeight: 700,
-                bgcolor: "rgba(0,109,119,0.1)",
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
               }}
             >
               {name}
@@ -464,19 +476,42 @@ export function TeamPlannerPanel() {
         </Stack>
       </Paper>
 
-      {activeErrorMessage && <Alert severity="error">{activeErrorMessage}</Alert>}
+      {!activeResult && !activeErrorMessage && !isBusy && (
+        <Paper
+          variant="outlined"
+          sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6, borderStyle: "dashed" }}
+        >
+          <Typography sx={{ fontWeight: 700, mb: 0.4 }}>No results yet</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Enter at least one player, then run a search to view shared unfinished maps.
+          </Typography>
+        </Paper>
+      )}
+
+      {activeErrorMessage && (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={handleRetryLastRequest}>
+              Retry
+            </Button>
+          }
+        >
+          {activeErrorMessage}
+        </Alert>
+      )}
 
       {activeResult && (
-        <Stack spacing={2}>
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
+        <Stack spacing={{ xs: 1.25, sm: 1.4, md: 1.5 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6 }}>
             <Stack
               direction={{ xs: "column", md: "row" }}
-              spacing={1.4}
+              spacing={1}
               justifyContent="space-between"
               alignItems={{ xs: "stretch", md: "center" }}
             >
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1.4}>
-                <Typography variant="body1" sx={{ fontWeight: 700 }}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                   Common unfinished maps
                 </Typography>
                 <Typography color="text.secondary">
@@ -484,12 +519,13 @@ export function TeamPlannerPanel() {
                 </Typography>
               </Stack>
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.8, sm: 0.9 }}>
                 <Button
                   variant="outlined"
                   size="small"
                   startIcon={<ContentCopyRounded />}
                   onClick={handleCopyMapNames}
+                  sx={{ width: { xs: "100%", sm: "auto" } }}
                 >
                   Copy Map Names
                 </Button>
@@ -498,6 +534,7 @@ export function TeamPlannerPanel() {
                   size="small"
                   startIcon={<DownloadRounded />}
                   onClick={handleExportCsv}
+                  sx={{ width: { xs: "100%", sm: "auto" } }}
                 >
                   Export CSV
                 </Button>
@@ -506,8 +543,8 @@ export function TeamPlannerPanel() {
           </Paper>
 
           {activeResult.random && (
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
-              <Typography variant="h6" sx={{ mb: 1.1 }}>
+            <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 700 }}>
                 Random Picks ({activeResult.random.returned})
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -517,10 +554,10 @@ export function TeamPlannerPanel() {
                     sx={{
                       px: 1.2,
                       py: 0.5,
-                      borderRadius: 2,
+                      borderRadius: "10px",
                       border: "1px solid",
                       borderColor: "divider",
-                      bgcolor: "rgba(239,108,0,0.08)",
+                      bgcolor: (theme) => alpha(theme.palette.secondary.main, 0.12),
                       fontWeight: 700,
                     }}
                   >
@@ -546,3 +583,6 @@ export function TeamPlannerPanel() {
     </Stack>
   );
 }
+
+export const TeamPlannerPanel = memo(TeamPlannerPanelComponent);
+TeamPlannerPanel.displayName = "TeamPlannerPanel";

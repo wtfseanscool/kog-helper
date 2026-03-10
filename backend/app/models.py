@@ -17,6 +17,10 @@ class TeamRandomRequest(TeamCommonRequest):
     seed: int | None = None
 
 
+class ProfileUpdateRequest(BaseModel):
+    kog_name: str = Field(min_length=2, max_length=64)
+
+
 class MapCatalogEntry(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

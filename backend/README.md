@@ -20,6 +20,14 @@ The app auto-loads `backend/.env` at startup.
 ## Endpoints
 
 - `GET /health`
+- `GET /api/auth/providers`
+- `GET /api/auth/me`
+- `POST /api/auth/profile`
+- `POST /api/auth/logout`
+- `GET /api/auth/google/start`
+- `GET /api/auth/google/callback`
+- `GET /api/auth/discord/start`
+- `GET /api/auth/discord/callback`
 - `GET /api/player/{player_name}`
 - `GET /api/maps/catalog?refresh=false`
 - `POST /api/team/common`
@@ -30,6 +38,14 @@ The app auto-loads `backend/.env` at startup.
 - KoG can require valid Cloudflare/session cookies.
 - Recommended prod env vars:
   - `CORS_ORIGINS`
+  - `FRONTEND_BASE_URL`
+  - `AUTH_SECRET_KEY`
+  - `AUTH_SESSION_TTL_SECONDS`
+  - `AUTH_COOKIE_SECURE`
+  - `AUTH_DB_PATH`
+  - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+  - `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`
+  - `AUTH_REDIRECT_BASE_URL` (when backend is behind a proxy / custom domain)
   - `PLAYER_CACHE_TTL_SECONDS` (default `1800` = 30 min)
   - `PLAYER_CACHE_REDIS_URL` (recommended in production)
   - `KOG_BOOTSTRAP_BROWSER` (`true` recommended when csrf-token is blocked)

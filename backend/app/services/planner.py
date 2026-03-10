@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import random
+import re
 from typing import Any
 
 from app.models import MapCatalogEntry, TeamCommonRequest, TeamRandomRequest
@@ -18,6 +19,10 @@ class PlayerSnapshot:
 
 
 class TeamPlannerService:
+    _DIFFICULTY_PATTERN = re.compile(
+        r"\b(easy|main|hard|insane|extreme|solo|mod)\b", re.IGNORECASE
+    )
+
     def __init__(
         self, kog_client: KoGApiClient, map_catalog: MapCatalogService
     ) -> None:
@@ -125,9 +130,7 @@ class TeamPlannerService:
         stars: int | None,
         include_unknown_metadata: bool,
     ) -> list[dict[str, Any]]:
-        target_difficulty = (
-            difficulty.strip().lower() if isinstance(difficulty, str) else None
-        )
+        target_difficulty = self._normalize_difficulty(difficulty)
 
         results: list[dict[str, Any]] = []
         for map_name in sorted(common_maps, key=str.lower):
@@ -144,11 +147,8 @@ class TeamPlannerService:
             }
 
             if target_difficulty:
-                value = entry["difficulty"]
-                if (
-                    not isinstance(value, str)
-                    or value.strip().lower() != target_difficulty
-                ):
+                value = self._normalize_difficulty(entry["difficulty"])
+                if value != target_difficulty:
                     continue
 
             if stars is not None:
@@ -161,6 +161,26 @@ class TeamPlannerService:
             results.append(entry)
 
         return results
+
+    @classmethod
+    def _normalize_difficulty(cls, value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+
+        cleaned = value.strip().lower()
+        if not cleaned:
+            return None
+
+        matched = cls._DIFFICULTY_PATTERN.search(cleaned)
+        if matched:
+            return matched.group(1)
+
+        compact = re.sub(r"[^a-z]", "", cleaned)
+        for token in ("easy", "main", "hard", "insane", "extreme", "solo", "mod"):
+            if compact == token or compact.startswith(token):
+                return token
+
+        return cleaned
 
     @staticmethod
     def _normalize_players(
