@@ -162,6 +162,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
   const [playersValidationMessage, setPlayersValidationMessage] = useState<string | null>(null);
   const [lastRequestedAction, setLastRequestedAction] = useState<"common" | "random" | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const [localRandomPick, setLocalRandomPick] = useState<TeamCommonResponse["random"]>();
 
   const commonMutation = useMutation({
     mutationFn: (payload: TeamCommonRequestPayload) => fetchTeamCommon(payload),
@@ -258,12 +259,59 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
   const activeResult: TeamCommonResponse | undefined =
     randomMutation.data ?? commonMutation.data;
 
+  const displayedResult = useMemo<TeamCommonResponse | undefined>(() => {
+    if (!activeResult) {
+      return undefined;
+    }
+
+    if (!localRandomPick) {
+      return activeResult;
+    }
+
+    return {
+      ...activeResult,
+      random: localRandomPick,
+    };
+  }, [activeResult, localRandomPick]);
+
   const activeError = randomMutation.error ?? commonMutation.error;
   const activeErrorMessage = activeError instanceof Error ? activeError.message : null;
 
   const isBusy = commonMutation.isPending || randomMutation.isPending;
   const isFindingCommon = commonMutation.isPending;
   const isFindingRandom = randomMutation.isPending;
+
+  const starsFilterValue = stars.trim() === "" ? null : Number(stars);
+  const normalizedStarsFilter = Number.isFinite(starsFilterValue) ? starsFilterValue : null;
+
+  const hasReusableCurrentPool = useMemo(() => {
+    if (!activeResult || isBusy || activeResult.maps.length === 0) {
+      return false;
+    }
+
+    const playersMatch =
+      activeResult.players.length === playerPreview.length
+      && activeResult.players.every((name, index) => name === playerPreview[index]);
+
+    if (!playersMatch) {
+      return false;
+    }
+
+    return (
+      activeResult.filters.difficulty === (difficulty || null)
+      && activeResult.filters.stars === normalizedStarsFilter
+      && activeResult.filters.include_unknown_metadata === includeUnknownMetadata
+    );
+  }, [
+    activeResult,
+    difficulty,
+    includeUnknownMetadata,
+    isBusy,
+    normalizedStarsFilter,
+    playerPreview,
+  ]);
+
+  const isRngBusy = isFindingRandom && !hasReusableCurrentPool;
 
   useEffect(() => {
     if (playerPreview.length > 0 && playersValidationMessage) {
@@ -276,6 +324,12 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
       setStars("");
     }
   }, [allowedStars, stars]);
+
+  useEffect(() => {
+    if (localRandomPick && !hasReusableCurrentPool) {
+      setLocalRandomPick(undefined);
+    }
+  }, [hasReusableCurrentPool, localRandomPick]);
 
   const buildPayload = (): TeamCommonRequestPayload => {
     const starsValue = stars.trim() === "" ? null : Number(stars);
@@ -296,6 +350,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
     }
 
     setLastRequestedAction("common");
+    setLocalRandomPick(undefined);
     randomMutation.reset();
     commonMutation.mutate(buildPayload());
   };
@@ -308,6 +363,23 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
     }
 
     setLastRequestedAction("random");
+    if (hasReusableCurrentPool && activeResult) {
+      const pool = activeResult.maps;
+      const pickedIndex = Math.floor(Math.random() * pool.length);
+      const pickedMap = pool[pickedIndex];
+      if (pickedMap) {
+        setLocalRandomPick({
+          seed: null,
+          requested: 1,
+          returned: 1,
+          maps: [pickedMap],
+        });
+        showToast("success", "Random pick selected from current filtered maps.");
+        return;
+      }
+    }
+
+    setLocalRandomPick(undefined);
     commonMutation.reset();
     const payload: TeamRandomRequestPayload = {
       ...buildPayload(),
@@ -447,7 +519,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
             </Button>
             <Button
               variant="outlined"
-              startIcon={isFindingRandom ? <CircularProgress color="inherit" size={14} /> : <CasinoRounded />}
+              startIcon={isRngBusy ? <CircularProgress color="inherit" size={14} /> : <CasinoRounded />}
               disabled={isBusy}
               onClick={runRandom}
               size="small"
@@ -472,7 +544,9 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
               icon={<CircularProgress size={16} color="inherit" />}
             >
               {isFindingRandom
-                ? "Selecting one random map from the shared unfinished list..."
+                ? hasReusableCurrentPool
+                  ? "Selecting a random map from the current filtered result..."
+                  : "Selecting one random map from the shared unfinished list..."
                 : "Finding shared unfinished maps for your team..."}
             </Alert>
           )}
@@ -535,7 +609,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
         </Alert>
       )}
 
-      {activeResult && (
+      {displayedResult && (
         <Stack spacing={{ xs: 1.25, sm: 1.4, md: 1.5 }}>
           <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6 }}>
             <Stack
@@ -553,7 +627,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
                   Common unfinished maps
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {activeResult.common_unfinished_total} total, {activeResult.common_unfinished_filtered} after filters
+                  {displayedResult.common_unfinished_total} total, {displayedResult.common_unfinished_filtered} after filters
                 </Typography>
               </Stack>
 
@@ -580,13 +654,13 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
             </Stack>
           </Paper>
 
-          {activeResult.random && (
+          {displayedResult.random && (
             <Paper variant="outlined" sx={{ p: { xs: 1.25, sm: 1.4, md: 1.5 }, borderRadius: 1.6 }}>
               <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 700 }}>
-                Random Picks ({activeResult.random.returned})
+                Random Picks ({displayedResult.random.returned})
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {activeResult.random.maps.map((entry) => (
+                {displayedResult.random.maps.map((entry) => (
                   <Box
                     key={`rand-${entry.name}`}
                     sx={{
@@ -606,7 +680,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
             </Paper>
           )}
 
-          <MapResultsTable maps={activeResult.maps} />
+          <MapResultsTable maps={displayedResult.maps} />
         </Stack>
       )}
 
