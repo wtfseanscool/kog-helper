@@ -64,6 +64,20 @@ function isNewlineDelimiter(value: string): boolean {
   return value === "\\n" || value.toLowerCase() === "newline" || value === "\n";
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function splitPlayersInput(value: string, delimiter: string): string[] {
+  const effectiveDelimiter = getEffectiveDelimiter(delimiter);
+  if (isNewlineDelimiter(effectiveDelimiter)) {
+    return value.split(/\r?\n/);
+  }
+
+  const splitPattern = new RegExp(`${escapeRegExp(effectiveDelimiter)}|\\r?\\n`, "g");
+  return value.split(splitPattern);
+}
+
 function toCsvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -153,11 +167,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
       return [];
     }
 
-    const splitDelimiter = getEffectiveDelimiter(delimiter);
-    const chunks =
-      isNewlineDelimiter(splitDelimiter)
-        ? playersText.split(/\r?\n/)
-        : playersText.split(splitDelimiter);
+    const chunks = splitPlayersInput(playersText, delimiter);
 
     const seen = new Set<string>();
     const cleaned: string[] = [];
@@ -355,7 +365,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
             label="Team players"
             placeholder={playersPlaceholder}
             error={Boolean(playersValidationMessage)}
-            helperText={playersValidationMessage ?? "Use your delimiter to separate player names."}
+            helperText={playersValidationMessage ?? "Use your delimiter or new lines to separate player names."}
           />
 
           <Stack
@@ -369,7 +379,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
               value={delimiter}
               onChange={(event) => setDelimiter(event.target.value)}
               label="Delimiter"
-              helperText="Default: comma (,)"
+              helperText="Default: comma (,). New lines are always valid."
               sx={{ width: { xs: "100%", sm: 150 } }}
             />
 
