@@ -234,11 +234,12 @@ function StarsDisplay({ stars, difficulty }: { stars: number | null; difficulty:
       <Typography
         noWrap
         sx={{
-          fontSize: 14,
+          fontSize: 16,
           lineHeight: 1,
-          color: "warning.main",
-          letterSpacing: 0.3,
+          color: "common.white",
+          letterSpacing: 0.5,
           fontWeight: 700,
+          textShadow: "0 0 1px rgba(0,0,0,0.55)",
         }}
       >
         {visual}
