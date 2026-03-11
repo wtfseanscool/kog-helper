@@ -44,7 +44,17 @@ type ToastState = {
 type PlayerLookupPanelProps = {
   requestedPlayerName?: string | null;
   requestedPlayerVersion?: number;
+  isActive?: boolean;
 };
+
+function getPlayerQueryParam(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const value = new URLSearchParams(window.location.search).get("player")?.trim();
+  return value && value.length > 0 ? value : "";
+}
 
 type TimelinePoint = {
   y: number;
@@ -304,11 +314,12 @@ async function copyText(text: string): Promise<void> {
 function PlayerLookupPanelComponent({
   requestedPlayerName = null,
   requestedPlayerVersion = 0,
+  isActive = true,
 }: PlayerLookupPanelProps) {
   const muiTheme = useTheme();
   const playerInputRef = useRef<HTMLInputElement | null>(null);
-  const [playerInput, setPlayerInput] = useState("");
-  const [submittedPlayer, setSubmittedPlayer] = useState("");
+  const [playerInput, setPlayerInput] = useState(() => getPlayerQueryParam());
+  const [submittedPlayer, setSubmittedPlayer] = useState(() => getPlayerQueryParam());
   const [playerValidationMessage, setPlayerValidationMessage] = useState<string | null>(null);
   const [mapStatusFilter, setMapStatusFilter] = useState<MapStatusFilter>("unfinished");
   const [mapSortColumn, setMapSortColumn] = useState<PlayerMapSortColumn>("name");
@@ -322,13 +333,13 @@ function PlayerLookupPanelComponent({
   const playerQuery = useQuery({
     queryKey: ["player", submittedPlayer],
     queryFn: () => fetchPlayer(submittedPlayer),
-    enabled: hasSubmittedPlayer,
+    enabled: hasSubmittedPlayer && isActive,
   });
 
   const mapCatalogQuery = useQuery({
     queryKey: ["map-catalog"],
     queryFn: fetchMapCatalog,
-    enabled: hasSubmittedPlayer,
+    enabled: hasSubmittedPlayer && isActive,
     staleTime: 10 * 60 * 1000,
   });
 
@@ -531,6 +542,32 @@ function PlayerLookupPanelComponent({
       setPlayerValidationMessage(null);
     }
   }, [playerInput, playerValidationMessage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isActive) {
+      return;
+    }
+
+    const currentQuery = window.location.search.startsWith("?")
+      ? window.location.search.slice(1)
+      : "";
+    const params = new URLSearchParams(currentQuery);
+    const normalizedPlayer = submittedPlayer.trim();
+
+    if (normalizedPlayer) {
+      params.set("player", normalizedPlayer);
+    } else {
+      params.delete("player");
+    }
+
+    const query = params.toString();
+    if (query === currentQuery) {
+      return;
+    }
+
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [isActive, submittedPlayer]);
 
   useEffect(() => {
     const target = requestedPlayerName?.trim();

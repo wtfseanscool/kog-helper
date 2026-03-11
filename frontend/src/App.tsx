@@ -73,6 +73,8 @@ const TEAM_TAB_QUERY_KEYS = [
   "seed",
 ] as const;
 
+const PLAYER_TAB_QUERY_KEYS = ["player"] as const;
+
 type AppProps = {
   themePreset: AppThemePreset;
 };
@@ -241,6 +243,7 @@ function App({ themePreset }: AppProps) {
 
     if (tab === "team") {
       params.set("tab", "team");
+      PLAYER_TAB_QUERY_KEYS.forEach((key) => params.delete(key));
     } else {
       params.delete("tab");
       TEAM_TAB_QUERY_KEYS.forEach((key) => params.delete(key));
@@ -640,6 +643,7 @@ function App({ themePreset }: AppProps) {
                 <PlayerLookupPanel
                   requestedPlayerName={profileLookupName}
                   requestedPlayerVersion={profileLookupVersion}
+                  isActive={tab === "player"}
                 />
               </Box>
               <Box sx={{ display: tab === "team" ? "block" : "none" }}>
