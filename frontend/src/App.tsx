@@ -64,6 +64,16 @@ type AuthToastState = {
   message: string;
 } | null;
 
+const TEAM_TAB_QUERY_KEYS = [
+  "players",
+  "delimiter",
+  "difficulty",
+  "stars",
+  "includeUnknown",
+  "count",
+  "seed",
+] as const;
+
 type AppProps = {
   themePreset: AppThemePreset;
 };
@@ -222,16 +232,26 @@ function App({ themePreset }: AppProps) {
       return;
     }
 
-    const params = new URLSearchParams(window.location.search);
+    const currentQuery = window.location.search.startsWith("?")
+      ? window.location.search.slice(1)
+      : "";
+
+    const params = new URLSearchParams(currentQuery);
     const currentTab = params.get("tab");
-    if (currentTab === tab) {
+
+    params.set("tab", tab);
+
+    if (tab === "player") {
+      TEAM_TAB_QUERY_KEYS.forEach((key) => params.delete(key));
+    }
+
+    const query = params.toString();
+    if (query === currentQuery) {
       return;
     }
 
-    params.set("tab", tab);
-    const query = params.toString();
     const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-    if (currentTab === null) {
+    if (currentTab === null || currentTab === tab) {
       window.history.replaceState({}, "", nextUrl);
       return;
     }
