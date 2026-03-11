@@ -32,6 +32,7 @@ import type {
 
 const DIFFICULTIES = ["", "Easy", "Main", "Hard", "Insane", "Extreme", "Mod"];
 const DEFAULT_DELIMITER = ",";
+const STAR_LIMITED_DIFFICULTIES = new Set(["Easy", "Main", "Hard", "Insane", "Extreme"]);
 
 type ToastState = {
   severity: "success" | "error" | "info";
@@ -76,6 +77,14 @@ function splitPlayersInput(value: string, delimiter: string): string[] {
 
   const splitPattern = new RegExp(`${escapeRegExp(effectiveDelimiter)}|\\r?\\n`, "g");
   return value.split(splitPattern);
+}
+
+function getAllowedStarFilters(difficulty: string): string[] {
+  if (STAR_LIMITED_DIFFICULTIES.has(difficulty)) {
+    return ["1", "2", "3"];
+  }
+
+  return ["1", "2", "3", "4", "5"];
 }
 
 function toCsvCell(value: unknown): string {
@@ -161,6 +170,8 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
   const randomMutation = useMutation({
     mutationFn: (payload: TeamRandomRequestPayload) => fetchTeamRandom(payload),
   });
+
+  const allowedStars = useMemo(() => getAllowedStarFilters(difficulty), [difficulty]);
 
   const playerPreview = useMemo(() => {
     if (!playersText.trim()) {
@@ -259,6 +270,12 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
       setPlayersValidationMessage(null);
     }
   }, [playerPreview, playersValidationMessage]);
+
+  useEffect(() => {
+    if (stars && !allowedStars.includes(stars)) {
+      setStars("");
+    }
+  }, [allowedStars, stars]);
 
   const buildPayload = (): TeamCommonRequestPayload => {
     const starsValue = stars.trim() === "" ? null : Number(stars);
@@ -408,11 +425,11 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
                 onChange={(event) => setStars(event.target.value)}
               >
                 <MenuItem value="">Any</MenuItem>
-                <MenuItem value="1">1</MenuItem>
-                <MenuItem value="2">2</MenuItem>
-                <MenuItem value="3">3</MenuItem>
-                <MenuItem value="4">4</MenuItem>
-                <MenuItem value="5">5</MenuItem>
+                {allowedStars.map((star) => (
+                  <MenuItem key={star} value={star}>
+                    {star}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Stack>
