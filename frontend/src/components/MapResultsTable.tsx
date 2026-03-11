@@ -225,25 +225,26 @@ function StarsDisplay({ stars, difficulty }: { stars: number | null; difficulty:
 
   const maxStars = maxStarsForDifficulty(difficulty);
   const normalizedStars = Math.max(0, Math.min(maxStars, Math.round(stars)));
-  const filled = "★".repeat(normalizedStars);
-  const empty = "☆".repeat(Math.max(0, maxStars - normalizedStars));
-  const visual = `${filled}${empty}`;
+  const emptyCount = Math.max(0, maxStars - normalizedStars);
 
   return (
     <MuiTooltip title={`${normalizedStars}/${maxStars} stars`} arrow>
-      <Typography
-        noWrap
+      <Box
         sx={{
           fontSize: 16,
           lineHeight: 1,
-          color: "common.white",
           letterSpacing: 0.5,
           fontWeight: 700,
           textShadow: "0 0 1px rgba(0,0,0,0.55)",
         }}
       >
-        {visual}
-      </Typography>
+        <Typography component="span" sx={{ color: "warning.main", font: "inherit" }}>
+          {"★".repeat(normalizedStars)}
+        </Typography>
+        <Typography component="span" sx={{ color: "common.white", font: "inherit" }}>
+          {"☆".repeat(emptyCount)}
+        </Typography>
+      </Box>
     </MuiTooltip>
   );
 }
