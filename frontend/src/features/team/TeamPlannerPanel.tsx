@@ -518,6 +518,13 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
       {activeErrorMessage && (
         <Alert
           severity="error"
+          sx={{
+            "& .MuiAlert-action": {
+              alignItems: "center",
+              m: 0,
+              py: 0,
+            },
+          }}
           action={
             <Button color="inherit" size="small" onClick={handleRetryLastRequest}>
               Retry
@@ -537,11 +544,15 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
               justifyContent="space-between"
               alignItems={{ xs: "stretch", md: "center" }}
             >
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1}
+                alignItems={{ xs: "flex-start", md: "baseline" }}
+              >
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                   Common unfinished maps
                 </Typography>
-                <Typography color="text.secondary">
+                <Typography variant="body2" color="text.secondary">
                   {activeResult.common_unfinished_total} total, {activeResult.common_unfinished_filtered} after filters
                 </Typography>
               </Stack>

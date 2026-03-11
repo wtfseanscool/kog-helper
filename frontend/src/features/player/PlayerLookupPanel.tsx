@@ -621,6 +621,13 @@ function PlayerLookupPanelComponent({
       {playerQuery.isError && (
         <Alert
           severity="error"
+          sx={{
+            "& .MuiAlert-action": {
+              alignItems: "center",
+              m: 0,
+              py: 0,
+            },
+          }}
           action={
             <Button color="inherit" size="small" onClick={() => playerQuery.refetch()}>
               Retry
