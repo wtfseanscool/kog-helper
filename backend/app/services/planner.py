@@ -191,10 +191,15 @@ class TeamPlannerService:
 
         if players_text:
             split_delimiter = delimiter or ","
-            if split_delimiter in {"\\n", "\\r\\n", "newline"}:
+            normalized_delimiter = split_delimiter.strip().casefold()
+            if split_delimiter in {"\n", "\r\n"} or normalized_delimiter in {
+                "\\n",
+                "\\r\\n",
+                "newline",
+            }:
                 chunks = players_text.splitlines()
             else:
-                chunks = players_text.split(split_delimiter)
+                chunks = re.split(rf"{re.escape(split_delimiter)}|\r?\n", players_text)
             items.extend(chunks)
 
         deduped: list[str] = []
