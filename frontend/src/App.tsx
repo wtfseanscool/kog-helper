@@ -147,6 +147,7 @@ function readAuthTokenPayloadFromHash(): { token: string | null; provider: strin
 
 function App({ themePreset }: AppProps) {
   const queryClient = useQueryClient();
+  const appHomeHref = import.meta.env.BASE_URL || "/";
   const [tab, setTab] = useState<AppTab>(() => readTabFromUrl());
   const [prototypeMode, setPrototypeMode] = useState<PrototypeType>(() =>
     readPrototypeFromUrl(),
@@ -418,10 +419,26 @@ function App({ themePreset }: AppProps) {
             minHeight: { xs: 54, sm: 56, md: 58 },
           }}
         >
-          <AutoAwesomeRounded sx={{ color: "primary.main", mr: 1.5 }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.2 }}>
-            KoG Helper
-          </Typography>
+          <Box
+            component="a"
+            href={appHomeHref}
+            aria-label="Go to KoG Helper home"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              textDecoration: "none",
+              color: "inherit",
+              minWidth: 0,
+              "&:hover": {
+                color: "primary.main",
+              },
+            }}
+          >
+            <AutoAwesomeRounded sx={{ color: "primary.main", mr: 1.5 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.2 }}>
+              KoG Helper
+            </Typography>
+          </Box>
           <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1.2 }}>
             {currentUser ? (
               <Tooltip title={currentUser.kog_name || currentUser.display_name || "Signed in"}>
