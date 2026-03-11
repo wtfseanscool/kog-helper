@@ -239,9 +239,10 @@ function App({ themePreset }: AppProps) {
     const params = new URLSearchParams(currentQuery);
     const currentTab = params.get("tab");
 
-    params.set("tab", tab);
-
-    if (tab === "player") {
+    if (tab === "team") {
+      params.set("tab", "team");
+    } else {
+      params.delete("tab");
       TEAM_TAB_QUERY_KEYS.forEach((key) => params.delete(key));
     }
 
