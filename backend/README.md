@@ -55,6 +55,7 @@ The app auto-loads `backend/.env` at startup.
 - Cache behavior:
   - Uses Redis when `PLAYER_CACHE_REDIS_URL` is reachable.
   - Falls back to local in-memory cache automatically if Redis is unavailable.
+  - Map catalog refresh now falls back to stale cache if upstream fetch fails.
 - Local fallback:
   - `KOG_BOOTSTRAP_BROWSER=true` (requires Playwright installed)
 
@@ -63,3 +64,5 @@ The app auto-loads `backend/.env` at startup.
 - Render blueprint: `../render.yaml`
 - Railway config: `railway.json`
 - Procfile: `Procfile`
+- Optional Render keep-warm workflow: `../.github/workflows/keep-render-warm.yml`
+  - Optional repo variable: `RENDER_PING_BASE_URL` (defaults to current Render URL)

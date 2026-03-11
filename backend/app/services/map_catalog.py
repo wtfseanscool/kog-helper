@@ -26,15 +26,25 @@ class MapCatalogService:
         self.kog_client = kog_client
         self.ttl_seconds = ttl_seconds
         self._cache: _CatalogCache | None = None
+        self._last_refresh_error: str | None = None
+        self._last_refresh_error_at_unix: float | None = None
         self._lock = threading.Lock()
 
     def cache_info(self) -> dict[str, str | int | None]:
         with self._lock:
+            error_at = None
+            if self._last_refresh_error_at_unix is not None:
+                error_at = datetime.fromtimestamp(
+                    self._last_refresh_error_at_unix, tz=timezone.utc
+                ).isoformat()
+
             if not self._cache:
                 return {
                     "cached": False,
                     "ttl_seconds": self.ttl_seconds,
                     "loaded_at": None,
+                    "last_refresh_error": self._last_refresh_error,
+                    "last_refresh_error_at": error_at,
                 }
 
             loaded_at = datetime.fromtimestamp(
@@ -45,6 +55,8 @@ class MapCatalogService:
                 "ttl_seconds": self.ttl_seconds,
                 "loaded_at": loaded_at,
                 "map_count": len(self._cache.entries),
+                "last_refresh_error": self._last_refresh_error,
+                "last_refresh_error_at": error_at,
             }
 
     def get_catalog(self, force_refresh: bool = False) -> list[MapCatalogEntry]:
@@ -57,10 +69,23 @@ class MapCatalogService:
             ):
                 return cache.entries
 
-        entries = self._fetch_catalog()
+        try:
+            entries = self._fetch_catalog()
+        except Exception as exc:
+            with self._lock:
+                self._last_refresh_error = str(exc)
+                self._last_refresh_error_at_unix = time.time()
+                stale_cache = self._cache
+
+            if stale_cache is not None and stale_cache.entries:
+                return stale_cache.entries
+
+            raise
 
         with self._lock:
             self._cache = _CatalogCache(loaded_at_unix=time.time(), entries=entries)
+            self._last_refresh_error = None
+            self._last_refresh_error_at_unix = None
 
         return entries
 

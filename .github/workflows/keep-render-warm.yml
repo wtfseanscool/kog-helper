@@ -1,0 +1,31 @@
+name: Keep Render Warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve target URL
+        id: target
+        shell: bash
+        run: |
+          BASE_URL="${{ vars.RENDER_PING_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            BASE_URL="https://kog-team-planner-api-zukt.onrender.com"
+          fi
+          echo "base_url=$BASE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Ping health and map catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="${{ steps.target.outputs.base_url }}"
+          echo "Pinging $BASE_URL"
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$BASE_URL/health" >/dev/null
+          curl -fsS --retry 2 --retry-delay 2 --max-time 45 "$BASE_URL/api/maps/catalog" >/dev/null

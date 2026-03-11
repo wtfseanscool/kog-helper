@@ -112,6 +112,15 @@ def _get_current_user_or_401(session_token: str | None):
     return user
 
 
+@app.on_event("startup")
+def warm_map_catalog_cache() -> None:
+    try:
+        map_catalog_service.get_catalog(force_refresh=False)
+    except Exception:
+        # Keep startup resilient; requests can still warm cache on-demand.
+        pass
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
