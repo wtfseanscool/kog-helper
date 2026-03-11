@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import Any, NoReturn
 from urllib.parse import quote_plus
 
@@ -87,25 +88,33 @@ def _handle_error(exc: Exception) -> NoReturn:
 
 def _set_auth_session_cookie(response: Response, session_token: str) -> None:
     cookie_samesite = "none" if settings.auth_cookie_secure else "lax"
-    response.set_cookie(
-        key=AUTH_SESSION_COOKIE,
-        value=session_token,
-        httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite=cookie_samesite,
-        max_age=max(3600, settings.auth_session_ttl_seconds),
-        path="/",
-    )
+    cookie_kwargs: dict[str, Any] = {
+        "key": AUTH_SESSION_COOKIE,
+        "value": session_token,
+        "httponly": True,
+        "secure": settings.auth_cookie_secure,
+        "samesite": cookie_samesite,
+        "max_age": max(3600, settings.auth_session_ttl_seconds),
+        "path": "/",
+    }
+    if settings.auth_cookie_secure and sys.version_info >= (3, 14):
+        cookie_kwargs["partitioned"] = True
+
+    response.set_cookie(**cookie_kwargs)
 
 
 def _clear_auth_session_cookie(response: Response) -> None:
     cookie_samesite = "none" if settings.auth_cookie_secure else "lax"
-    response.delete_cookie(
-        key=AUTH_SESSION_COOKIE,
-        path="/",
-        samesite=cookie_samesite,
-        secure=settings.auth_cookie_secure,
-    )
+    cookie_kwargs: dict[str, Any] = {
+        "key": AUTH_SESSION_COOKIE,
+        "path": "/",
+        "samesite": cookie_samesite,
+        "secure": settings.auth_cookie_secure,
+    }
+    if settings.auth_cookie_secure and sys.version_info >= (3, 14):
+        cookie_kwargs["partitioned"] = True
+
+    response.delete_cookie(**cookie_kwargs)
 
 
 def _get_current_user_or_401(session_token: str | None):
@@ -273,6 +282,7 @@ def auth_google_callback(
         key=AUTH_STATE_COOKIE,
         path="/",
         samesite="lax",
+        secure=settings.auth_cookie_secure,
     )
     return response
 
@@ -306,6 +316,7 @@ def auth_discord_callback(
         key=AUTH_STATE_COOKIE,
         path="/",
         samesite="lax",
+        secure=settings.auth_cookie_secure,
     )
     return response
 
