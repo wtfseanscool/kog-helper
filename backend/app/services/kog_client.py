@@ -125,11 +125,22 @@ class KoGApiClient:
 
     def _get_nonce(self) -> str:
         endpoint = f"{self.base_url}/api.php?type=csrf-token"
+        max_attempts = 4
+        last_error: Exception | None = None
 
-        for attempt in range(2):
+        for attempt in range(max_attempts):
             try:
                 response = self.session.get(endpoint, timeout=self.timeout)
             except requests.RequestException as exc:
+                last_error = exc
+                self._log(
+                    f"csrf-token request failed ({attempt + 1}/{max_attempts}): {exc}"
+                )
+                if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+                    self._bootstrap_cookies_with_playwright()
+                if attempt < max_attempts - 1:
+                    time.sleep(0.5 + attempt)
+                    continue
                 raise KoGApiError(
                     f"Request error while fetching csrf-token: {exc}"
                 ) from exc
@@ -139,6 +150,19 @@ class KoGApiClient:
                 try:
                     data = response.json()
                 except Exception as exc:
+                    last_error = exc
+                    self._log(
+                        f"csrf-token parse failed ({attempt + 1}/{max_attempts}): {text[:120]}"
+                    )
+                    if (
+                        attempt == 0
+                        and self.bootstrap_browser
+                        and not self._bootstrapped
+                    ):
+                        self._bootstrap_cookies_with_playwright()
+                    if attempt < max_attempts - 1:
+                        time.sleep(0.5 + attempt)
+                        continue
                     raise KoGApiError(
                         f"Could not parse csrf-token JSON: {text[:160]}"
                     ) from exc
@@ -146,10 +170,18 @@ class KoGApiClient:
                 nonce = data.get("nonce")
                 if isinstance(nonce, str) and nonce:
                     return nonce
+                last_error = KoGApiError(f"csrf-token missing nonce: {data}")
+                if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+                    self._bootstrap_cookies_with_playwright()
+                if attempt < max_attempts - 1:
+                    time.sleep(0.5 + attempt)
+                    continue
                 raise KoGApiError(f"csrf-token missing nonce: {data}")
 
-            if attempt == 0 and self.bootstrap_browser:
+            if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
                 self._bootstrap_cookies_with_playwright()
+            if attempt < max_attempts - 1:
+                time.sleep(0.5 + attempt)
                 continue
 
             raise KoGApiError(
@@ -157,7 +189,7 @@ class KoGApiClient:
                 "or enable bootstrap_browser."
             )
 
-        raise KoGApiError("Unable to get nonce")
+        raise KoGApiError(f"Unable to get nonce after retries: {last_error}")
 
     def fetch_page_html(self, page_id: str) -> str:
         path = f"/get.php?p={page_id}"
@@ -192,8 +224,18 @@ class KoGApiClient:
             payload["tz"] = self.timezone
 
         with self._lock:
-            for attempt in range(2):
-                nonce = self._get_nonce()
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    nonce = self._get_nonce()
+                except KoGApiError as exc:
+                    if attempt < max_attempts - 1:
+                        self._log(
+                            f"nonce acquisition failed before api.php call ({attempt + 1}/{max_attempts}): {exc}"
+                        )
+                        time.sleep(0.5 + attempt)
+                        continue
+                    raise
                 request_payload = dict(payload)
                 request_payload["nonce"] = nonce
 
@@ -204,6 +246,12 @@ class KoGApiClient:
                         timeout=self.timeout,
                     )
                 except requests.RequestException as exc:
+                    if attempt < max_attempts - 1:
+                        self._log(
+                            f"api.php request failed ({attempt + 1}/{max_attempts}): {exc}"
+                        )
+                        time.sleep(0.5 + attempt)
+                        continue
                     raise KoGApiError(
                         f"Request error while calling api.php: {exc}"
                     ) from exc
@@ -217,6 +265,12 @@ class KoGApiClient:
                     ):
                         self._bootstrap_cookies_with_playwright()
                         continue
+                    if attempt < max_attempts - 1:
+                        self._log(
+                            f"api.php returned empty body ({attempt + 1}/{max_attempts}); retrying"
+                        )
+                        time.sleep(0.5 + attempt)
+                        continue
                     raise KoGApiError(
                         "Empty response from api.php (stale nonce or blocked session)."
                     )
@@ -224,6 +278,12 @@ class KoGApiClient:
                 try:
                     data = response.json()
                 except Exception as exc:
+                    if attempt < max_attempts - 1:
+                        self._log(
+                            f"api.php returned non-JSON ({attempt + 1}/{max_attempts}): {body[:120]}"
+                        )
+                        time.sleep(0.5 + attempt)
+                        continue
                     raise KoGApiError(
                         f"api.php returned non-JSON: {body[:180]}"
                     ) from exc
