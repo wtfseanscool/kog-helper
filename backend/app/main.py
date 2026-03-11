@@ -176,6 +176,11 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "environment": settings.app_env,
         "cors_origins": settings.cors_origins,
+        "kog_session": {
+            "bootstrap_browser": settings.bootstrap_browser,
+            "has_cf_clearance": bool(settings.cf_clearance),
+            "has_php_sessid": bool(settings.php_sessid),
+        },
         "map_catalog": map_catalog_service.cache_info(),
         "player_cache": kog_client.player_cache_info(),
     }

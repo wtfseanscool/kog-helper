@@ -136,7 +136,7 @@ class KoGApiClient:
                 self._log(
                     f"csrf-token request failed ({attempt + 1}/{max_attempts}): {exc}"
                 )
-                if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+                if attempt == 0 and self.bootstrap_browser:
                     self._bootstrap_cookies_with_playwright()
                 if attempt < max_attempts - 1:
                     time.sleep(0.5 + attempt)
@@ -154,11 +154,7 @@ class KoGApiClient:
                     self._log(
                         f"csrf-token parse failed ({attempt + 1}/{max_attempts}): {text[:120]}"
                     )
-                    if (
-                        attempt == 0
-                        and self.bootstrap_browser
-                        and not self._bootstrapped
-                    ):
+                    if attempt == 0 and self.bootstrap_browser:
                         self._bootstrap_cookies_with_playwright()
                     if attempt < max_attempts - 1:
                         time.sleep(0.5 + attempt)
@@ -171,14 +167,14 @@ class KoGApiClient:
                 if isinstance(nonce, str) and nonce:
                     return nonce
                 last_error = KoGApiError(f"csrf-token missing nonce: {data}")
-                if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+                if attempt == 0 and self.bootstrap_browser:
                     self._bootstrap_cookies_with_playwright()
                 if attempt < max_attempts - 1:
                     time.sleep(0.5 + attempt)
                     continue
                 raise KoGApiError(f"csrf-token missing nonce: {data}")
 
-            if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+            if attempt == 0 and self.bootstrap_browser:
                 self._bootstrap_cookies_with_playwright()
             if attempt < max_attempts - 1:
                 time.sleep(0.5 + attempt)
@@ -206,7 +202,7 @@ class KoGApiClient:
             if response.status_code == 200 and body:
                 return body
 
-            if attempt == 0 and self.bootstrap_browser and not self._bootstrapped:
+            if attempt == 0 and self.bootstrap_browser:
                 self._bootstrap_cookies_with_playwright()
                 continue
 
@@ -258,11 +254,7 @@ class KoGApiClient:
                 body = response.text.strip()
 
                 if not body:
-                    if (
-                        attempt == 0
-                        and self.bootstrap_browser
-                        and not self._bootstrapped
-                    ):
+                    if attempt == 0 and self.bootstrap_browser:
                         self._bootstrap_cookies_with_playwright()
                         continue
                     if attempt < max_attempts - 1:
