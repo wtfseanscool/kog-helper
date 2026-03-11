@@ -1,7 +1,5 @@
-import StarOutlineRounded from "@mui/icons-material/StarOutlineRounded";
 import {
   Box,
-  Chip,
   Paper,
   Stack,
   Table,
@@ -192,17 +190,60 @@ function EllipsisCell({ value }: { value: string }) {
   );
 }
 
-function StarsChip({ stars }: { stars: number | null }) {
+function normalizeDifficulty(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const compact = normalized.replace(/[^a-z]/g, "");
+  const match = DIFFICULTY_SORT_ORDER.find(
+    (entry) => compact === entry || compact.startsWith(entry),
+  );
+  return match ?? null;
+}
+
+function maxStarsForDifficulty(difficulty: string | null): number {
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  if (
+    normalizedDifficulty === "easy"
+    || normalizedDifficulty === "main"
+    || normalizedDifficulty === "hard"
+    || normalizedDifficulty === "insane"
+    || normalizedDifficulty === "extreme"
+  ) {
+    return 3;
+  }
+
+  return 5;
+}
+
+function StarsDisplay({ stars, difficulty }: { stars: number | null; difficulty: string | null }) {
   if (stars === null) {
     return <Typography variant="body2" color="text.secondary">-</Typography>;
   }
 
+  const maxStars = maxStarsForDifficulty(difficulty);
+  const normalizedStars = Math.max(0, Math.min(maxStars, Math.round(stars)));
+  const filled = "★".repeat(normalizedStars);
+  const empty = "☆".repeat(Math.max(0, maxStars - normalizedStars));
+  const visual = `${filled}${empty}`;
+
   return (
-    <Chip
-      icon={<StarOutlineRounded sx={{ fontSize: 16 }} />}
-      label={`${stars}/5`}
-      sx={{ bgcolor: (theme) => alpha(theme.palette.secondary.main, 0.16) }}
-    />
+    <MuiTooltip title={`${normalizedStars}/${maxStars} stars`} arrow>
+      <Typography
+        noWrap
+        sx={{
+          fontSize: 14,
+          lineHeight: 1,
+          color: "warning.main",
+          letterSpacing: 0.3,
+          fontWeight: 700,
+        }}
+      >
+        {visual}
+      </Typography>
+    </MuiTooltip>
   );
 }
 
@@ -415,7 +456,7 @@ function MapResultsTableComponent({ maps, maxHeight = 440 }: MapResultsTableProp
                       )}
                     </TableCell>
                     <TableCell>
-                      <StarsChip stars={row.stars} />
+                      <StarsDisplay stars={row.stars} difficulty={row.difficulty} />
                     </TableCell>
                     <TableCell>
                       <Typography noWrap>{row.points ?? "-"}</Typography>
