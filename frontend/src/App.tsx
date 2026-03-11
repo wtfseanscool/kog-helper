@@ -154,6 +154,7 @@ function App({ themePreset }: AppProps) {
   const [prototypeMode, setPrototypeMode] = useState<PrototypeType>(() =>
     readPrototypeFromUrl(),
   );
+  const [homeResetVersion, setHomeResetVersion] = useState(0);
   const [authMenuAnchorEl, setAuthMenuAnchorEl] = useState<HTMLElement | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [kogNameDraft, setKogNameDraft] = useState("");
@@ -377,6 +378,16 @@ function App({ themePreset }: AppProps) {
     updateProfileMutation.mutate({ kog_name: normalized });
   };
 
+  const handleGoHome = () => {
+    if (typeof window !== "undefined") {
+      window.history.pushState({}, "", appHomeHref);
+    }
+
+    setTab("player");
+    setProfileLookupName(null);
+    setHomeResetVersion((value) => value + 1);
+  };
+
   const subtitle = useMemo(() => {
     if (tab === "player") {
       return "Inspect one player in detail with timeline, unfinished maps, and finished maps.";
@@ -424,8 +435,9 @@ function App({ themePreset }: AppProps) {
           }}
         >
           <Box
-            component="a"
-            href={appHomeHref}
+            component="button"
+            type="button"
+            onClick={handleGoHome}
             aria-label="Go to KoG Helper home"
             sx={{
               display: "inline-flex",
@@ -433,6 +445,10 @@ function App({ themePreset }: AppProps) {
               textDecoration: "none",
               color: "inherit",
               minWidth: 0,
+              border: 0,
+              background: "transparent",
+              p: 0,
+              cursor: "pointer",
               "&:hover": {
                 color: "primary.main",
               },
@@ -641,13 +657,14 @@ function App({ themePreset }: AppProps) {
             <Box sx={{ p: { xs: 1, sm: 1.25, md: 1.75 } }}>
               <Box sx={{ display: tab === "player" ? "block" : "none" }}>
                 <PlayerLookupPanel
+                  key={`player-${homeResetVersion}`}
                   requestedPlayerName={profileLookupName}
                   requestedPlayerVersion={profileLookupVersion}
                   isActive={tab === "player"}
                 />
               </Box>
               <Box sx={{ display: tab === "team" ? "block" : "none" }}>
-                <TeamPlannerPanel isActive={tab === "team"} />
+                <TeamPlannerPanel key={`team-${homeResetVersion}`} isActive={tab === "team"} />
               </Box>
             </Box>
           </Paper>
