@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from typing import Any, NoReturn
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
-from fastapi import Cookie, FastAPI, HTTPException, Query, Request, Response
+from fastapi import (
+    Cookie,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
@@ -115,6 +123,44 @@ def _get_current_user_or_401(session_token: str | None):
     return user
 
 
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+
+    normalized = token.strip()
+    return normalized or None
+
+
+def _resolve_session_token(
+    cookie_session_token: str | None,
+    authorization: str | None,
+) -> str | None:
+    bearer = _extract_bearer_token(authorization)
+    if bearer:
+        return bearer
+    return cookie_session_token
+
+
+def _append_fragment_params(url: str, params: dict[str, str]) -> str:
+    parsed = urlsplit(url)
+
+    existing_parts: list[str] = []
+    if parsed.fragment:
+        existing_parts.append(parsed.fragment)
+
+    for key, value in params.items():
+        existing_parts.append(f"{key}={quote_plus(value)}")
+
+    fragment = "&".join(existing_parts)
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.query, fragment)
+    )
+
+
 @app.on_event("startup")
 def warm_map_catalog_cache() -> None:
     try:
@@ -146,8 +192,10 @@ def auth_providers() -> dict[str, Any]:
 @app.get("/api/auth/me")
 def auth_me(
     session_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> dict[str, Any]:
-    user = auth_service.get_user_from_session(session_token)
+    resolved_token = _resolve_session_token(session_token, authorization)
+    user = auth_service.get_user_from_session(resolved_token)
     if user is None:
         return {
             "status": "ok",
@@ -166,8 +214,10 @@ def auth_me(
 def auth_profile_update(
     payload: ProfileUpdateRequest,
     session_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> dict[str, Any]:
-    user = _get_current_user_or_401(session_token)
+    resolved_token = _resolve_session_token(session_token, authorization)
+    user = _get_current_user_or_401(resolved_token)
     try:
         updated_user = auth_service.update_kog_name(
             user_id=user.id,
@@ -259,7 +309,14 @@ def auth_google_callback(
             state=state,
             state_token=oauth_state,
         )
-        response = RedirectResponse(url=next_url, status_code=302)
+        redirect_url = _append_fragment_params(
+            next_url,
+            {
+                "auth_token": session_token,
+                "auth_provider": "google",
+            },
+        )
+        response = RedirectResponse(url=redirect_url, status_code=302)
         _set_auth_session_cookie(response, session_token)
     except AuthError as exc:
         fallback = (
@@ -293,7 +350,14 @@ def auth_discord_callback(
             state=state,
             state_token=oauth_state,
         )
-        response = RedirectResponse(url=next_url, status_code=302)
+        redirect_url = _append_fragment_params(
+            next_url,
+            {
+                "auth_token": session_token,
+                "auth_provider": "discord",
+            },
+        )
+        response = RedirectResponse(url=redirect_url, status_code=302)
         _set_auth_session_cookie(response, session_token)
     except AuthError as exc:
         fallback = (

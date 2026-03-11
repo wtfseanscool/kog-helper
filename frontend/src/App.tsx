@@ -46,7 +46,9 @@ import {
   buildAuthStartUrl,
   fetchAuthMe,
   fetchAuthProviders,
+  getAuthToken,
   logoutAuthSession,
+  setAuthToken,
   updateAuthProfile,
 } from "./lib/api";
 import type { AuthUser } from "./lib/types";
@@ -120,6 +122,27 @@ function readAuthReasonFromUrl(): string | null {
   return reason;
 }
 
+function readAuthTokenPayloadFromHash(): { token: string | null; provider: string | null } {
+  if (typeof window === "undefined") {
+    return { token: null, provider: null };
+  }
+
+  const raw = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!raw) {
+    return { token: null, provider: null };
+  }
+
+  const params = new URLSearchParams(raw);
+  const token = params.get("auth_token")?.trim() ?? null;
+  const provider = params.get("auth_provider")?.trim() ?? null;
+  return {
+    token: token && token.length > 0 ? token : null,
+    provider: provider && provider.length > 0 ? provider : null,
+  };
+}
+
 function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<AppTab>(() => readTabFromUrl());
@@ -166,6 +189,7 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
   const logoutMutation = useMutation({
     mutationFn: logoutAuthSession,
     onSuccess: () => {
+      setAuthToken(null);
       void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       setAuthMenuAnchorEl(null);
       setAuthToast({ severity: "success", message: "Signed out." });
@@ -227,6 +251,38 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
       return;
     }
 
+    const { token, provider } = readAuthTokenPayloadFromHash();
+    if (!token) {
+      return;
+    }
+
+    setAuthToken(token);
+    void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+
+    const hashParams = new URLSearchParams(
+      window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+    );
+    hashParams.delete("auth_token");
+    hashParams.delete("auth_provider");
+
+    const nextHash = hashParams.toString();
+    const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ""}`;
+    window.history.replaceState({}, "", nextUrl);
+
+    const providerLabel = provider
+      ? provider[0].toUpperCase() + provider.slice(1).toLowerCase()
+      : null;
+    setAuthToast({
+      severity: "success",
+      message: providerLabel ? `Signed in with ${providerLabel}.` : "Signed in successfully.",
+    });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     if (!params.has("auth") && !params.has("reason")) {
       return;
@@ -238,6 +294,12 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
     const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
     window.history.replaceState({}, "", nextUrl);
   }, []);
+
+  useEffect(() => {
+    if (authMeQuery.data?.authenticated === false && getAuthToken()) {
+      setAuthToken(null);
+    }
+  }, [authMeQuery.data]);
 
   useEffect(() => {
     if (!profileDialogOpen) {
@@ -260,7 +322,8 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
       return;
     }
 
-    window.location.href = buildAuthStartUrl(provider, window.location.href);
+    const nextUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    window.location.href = buildAuthStartUrl(provider, nextUrl);
   };
 
   const handleOpenProfileDialog = () => {

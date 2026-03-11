@@ -16,11 +16,47 @@ export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ||
   "http://127.0.0.1:8000";
 
+const AUTH_TOKEN_STORAGE_KEY = "kog-auth-token";
+
+let authToken: string | null = null;
+
+if (typeof window !== "undefined") {
+  const stored = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  authToken = stored && stored.trim().length > 0 ? stored.trim() : null;
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60_000,
   withCredentials: true,
 });
+
+api.interceptors.request.use((config) => {
+  if (authToken) {
+    config.headers = config.headers ?? {};
+    (config.headers as Record<string, string>).Authorization = `Bearer ${authToken}`;
+  }
+  return config;
+});
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+export function setAuthToken(token: string | null): void {
+  const normalized = token?.trim() ?? "";
+  authToken = normalized.length > 0 ? normalized : null;
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (authToken) {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
+  } else {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  }
+}
 
 function toErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
