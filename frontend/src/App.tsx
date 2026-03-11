@@ -8,7 +8,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   Container,
   Dialog,
   DialogActions,
@@ -375,7 +374,7 @@ function App({ themePreset }: AppProps) {
 
   const subtitle = useMemo(() => {
     if (tab === "player") {
-      return "Inspect one player in detail with timeline and unfinished maps.";
+      return "Inspect one player in detail with timeline, unfinished maps, and finished maps.";
     }
     return "Find shared unfinished maps for a full team and generate a random pick.";
   }, [tab]);
@@ -421,13 +420,8 @@ function App({ themePreset }: AppProps) {
         >
           <AutoAwesomeRounded sx={{ color: "primary.main", mr: 1.5 }} />
           <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.2 }}>
-            KoG Team Planner
+            KoG Helper
           </Typography>
-          <Chip
-            size="small"
-            label="GitHub Pages + API"
-            sx={{ ml: 2, display: { xs: "none", md: "inline-flex" } }}
-          />
           <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1.2 }}>
             {currentUser ? (
               <Tooltip title={currentUser.kog_name || currentUser.display_name || "Signed in"}>
@@ -581,7 +575,7 @@ function App({ themePreset }: AppProps) {
                 fontSize: { xs: "1.45rem", sm: "1.7rem", md: "2rem" },
               }}
             >
-              KoG Progress Explorer
+              KoG Helper
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ fontSize: { xs: "0.9rem", sm: "0.95rem", md: "1rem" } }}>
               {subtitle}
