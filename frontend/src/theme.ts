@@ -375,7 +375,7 @@ export const APP_THEME_PRESETS: readonly AppThemePreset[] = THEME_PRESET_CONFIGS
 const APP_THEME_BY_ID = new Map(APP_THEME_PRESETS.map((preset) => [preset.id, preset]));
 
 export const APP_THEME_STORAGE_KEY = "kog-app-theme";
-export const DEFAULT_APP_THEME_ID: AppThemeId = "lagoon-light";
+export const DEFAULT_APP_THEME_ID: AppThemeId = "kog-dark";
 
 export function isAppThemeId(value: string): value is AppThemeId {
   return APP_THEME_BY_ID.has(value as AppThemeId);

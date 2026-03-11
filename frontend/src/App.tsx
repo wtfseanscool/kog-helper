@@ -14,7 +14,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -22,7 +21,6 @@ import {
   MenuItem,
   Paper,
   Snackbar,
-  Select,
   Stack,
   Tab,
   Tabs,
@@ -31,7 +29,6 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import type { SelectChangeEvent } from "@mui/material/Select";
 import { alpha } from "@mui/material/styles";
 import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import LoginRounded from "@mui/icons-material/LoginRounded";
@@ -53,7 +50,6 @@ import {
 } from "./lib/api";
 import type { AuthUser } from "./lib/types";
 import {
-  type AppThemeId,
   type AppThemePreset,
 } from "./theme";
 
@@ -69,10 +65,7 @@ type AuthToastState = {
 } | null;
 
 type AppProps = {
-  themeId: AppThemeId;
   themePreset: AppThemePreset;
-  themeOptions: readonly AppThemePreset[];
-  onThemeChange: (themeId: AppThemeId) => void;
 };
 
 function readPrototypeFromUrl(): PrototypeType {
@@ -143,7 +136,7 @@ function readAuthTokenPayloadFromHash(): { token: string | null; provider: strin
   };
 }
 
-function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
+function App({ themePreset }: AppProps) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<AppTab>(() => readTabFromUrl());
   const [prototypeMode, setPrototypeMode] = useState<PrototypeType>(() =>
@@ -367,12 +360,6 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
     return "Find shared unfinished maps for a full team and generate a random pick.";
   }, [tab]);
 
-  const themeModeLabel = themePreset.mode === "dark" ? "Dark" : "Light";
-
-  const handleThemeChange = (event: SelectChangeEvent<AppThemeId>) => {
-    onThemeChange(event.target.value as AppThemeId);
-  };
-
   if (prototypeMode) {
     return (
       <Suspense
@@ -453,62 +440,6 @@ function App({ themeId, themePreset, themeOptions, onThemeChange }: AppProps) {
                 Sign In
               </Button>
             )}
-            <Chip
-              size="small"
-              label={`${themeModeLabel} mode`}
-              variant="outlined"
-              sx={{
-                display: { xs: "none", sm: "inline-flex" },
-                borderColor: "divider",
-                bgcolor: (theme) =>
-                  alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.75 : 0.7),
-              }}
-            />
-            <FormControl
-              size="small"
-              sx={{
-                minWidth: { xs: 150, sm: 210, md: 236 },
-                "& .MuiOutlinedInput-root": {
-                  bgcolor: (theme) =>
-                    alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.82 : 0.76),
-                },
-              }}
-            >
-              <Select
-                value={themeId}
-                onChange={handleThemeChange}
-                displayEmpty
-                renderValue={(selected) => {
-                  const preset = themeOptions.find((option) => option.id === selected);
-                  return preset?.name ?? selected;
-                }}
-              >
-                {themeOptions.map((preset) => (
-                  <MenuItem key={preset.id} value={preset.id}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
-                      <Box
-                        sx={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "50%",
-                          flexShrink: 0,
-                          backgroundColor: preset.theme.palette.primary.main,
-                          boxShadow: `0 0 0 1px ${preset.theme.palette.divider} inset`,
-                        }}
-                      />
-                      <Box>
-                        <Typography variant="body2" sx={{ lineHeight: 1.15, fontWeight: 700 }}>
-                          {preset.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          {preset.inspiration}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
           </Box>
         </Toolbar>
       </AppBar>

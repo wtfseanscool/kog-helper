@@ -7,6 +7,7 @@ import {
   Chip,
   Grid,
   Paper,
+  Portal,
   Snackbar,
   Stack,
   Table,
@@ -72,9 +73,9 @@ const PLAYER_MAP_COLUMNS: ReadonlyArray<{
   { key: "name", label: "Map", cellSx: { width: "34%" } },
   { key: "difficulty", label: "Difficulty", cellSx: { width: "14%" } },
   { key: "stars", label: "Stars", cellSx: { width: "10%" } },
-  { key: "points", label: "Points", cellSx: { width: "10%", display: { xs: "none", sm: "table-cell" } } },
+  { key: "points", label: "Points", cellSx: { width: "8%", display: { xs: "none", sm: "table-cell" } } },
   { key: "author", label: "Author", cellSx: { width: "16%", display: { xs: "none", sm: "table-cell" } } },
-  { key: "releasedAt", label: "Released", cellSx: { width: "16%", display: { xs: "none", md: "table-cell" } } },
+  { key: "releasedAt", label: "Released", cellSx: { width: "18%", display: { xs: "none", md: "table-cell" } } },
 ];
 
 function getPlayerMapColumnSx(columnKey: PlayerMapSortColumn): object {
@@ -856,13 +857,18 @@ function PlayerLookupPanelComponent({
                                 <EllipsisCell value={entry.author ?? "-"} />
                               </TableCell>
                               <TableCell sx={getPlayerMapColumnSx("releasedAt")}>
-                                <EllipsisCell
-                                  value={
-                                    mapStatusFilter === "finished"
-                                      ? (entry.finishedAt ?? "NA")
-                                      : (entry.releasedAt ?? "NA")
-                                  }
-                                />
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                    lineHeight: 1.3,
+                                  }}
+                                >
+                                  {mapStatusFilter === "finished"
+                                    ? (entry.finishedAt ?? "NA")
+                                    : (entry.releasedAt ?? "NA")}
+                                </Typography>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -972,14 +978,21 @@ function PlayerLookupPanelComponent({
         </Stack>
       )}
 
-      <Snackbar
-        open={toast !== null}
-        autoHideDuration={2500}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        {toast ? <Alert severity={toast.severity}>{toast.message}</Alert> : <span />}
-      </Snackbar>
+      <Portal>
+        <Snackbar
+          open={toast !== null}
+          autoHideDuration={2500}
+          onClose={() => setToast(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+          sx={{
+            position: "fixed",
+            bottom: { xs: 12, sm: 20 },
+            zIndex: (theme) => theme.zIndex.snackbar,
+          }}
+        >
+          {toast ? <Alert severity={toast.severity}>{toast.message}</Alert> : <span />}
+        </Snackbar>
+      </Portal>
     </Stack>
   );
 }
