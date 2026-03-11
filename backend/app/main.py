@@ -86,22 +86,25 @@ def _handle_error(exc: Exception) -> NoReturn:
 
 
 def _set_auth_session_cookie(response: Response, session_token: str) -> None:
+    cookie_samesite = "none" if settings.auth_cookie_secure else "lax"
     response.set_cookie(
         key=AUTH_SESSION_COOKIE,
         value=session_token,
         httponly=True,
         secure=settings.auth_cookie_secure,
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=max(3600, settings.auth_session_ttl_seconds),
         path="/",
     )
 
 
 def _clear_auth_session_cookie(response: Response) -> None:
+    cookie_samesite = "none" if settings.auth_cookie_secure else "lax"
     response.delete_cookie(
         key=AUTH_SESSION_COOKIE,
         path="/",
-        samesite="lax",
+        samesite=cookie_samesite,
+        secure=settings.auth_cookie_secure,
     )
 
 
