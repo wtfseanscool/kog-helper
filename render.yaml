@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kog-team-planner-api
+    name: kog-helper
     runtime: python
     rootDir: backend
     plan: free
@@ -24,6 +24,26 @@ services:
       - key: REQUEST_TIMEOUT_SECONDS
         value: "30"
       - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: AUTH_REDIRECT_BASE_URL
+        value: https://kog-helper.onrender.com
+      - key: AUTH_SECRET_KEY
+        sync: false
+      - key: AUTH_SESSION_TTL_SECONDS
+        value: "2592000"
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_DB_PATH
+        value: /opt/render/project/src/backend/data/auth.db
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
         sync: false
       - key: KOG_CF_CLEARANCE
         sync: false
