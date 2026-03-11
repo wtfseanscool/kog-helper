@@ -379,7 +379,7 @@ function TeamPlannerPanelComponent({ isActive = true }: TeamPlannerPanelProps) {
               value={delimiter}
               onChange={(event) => setDelimiter(event.target.value)}
               label="Delimiter"
-              helperText="Default: comma (,). New lines are always valid."
+              helperText="Default: comma (,)."
               sx={{ width: { xs: "100%", sm: 150 } }}
             />
 
