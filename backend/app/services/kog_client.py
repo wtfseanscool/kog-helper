@@ -27,6 +27,7 @@ class KoGApiClient:
         user_agent: str = "Mozilla/5.0",
         cf_clearance: str | None = None,
         php_sessid: str | None = None,
+        proxy_url: str | None = None,
         debug: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -45,6 +46,14 @@ class KoGApiClient:
         )
 
         self.session = requests.Session()
+        self.proxy_url = proxy_url
+
+        if proxy_url:
+            self.session.proxies = {
+                "http": proxy_url,
+                "https": proxy_url,
+            }
+
         self.session.headers.update(
             {
                 "User-Agent": user_agent,
@@ -83,7 +92,10 @@ class KoGApiClient:
         for attempt in range(3):
             try:
                 with sync_playwright() as pw:
-                    browser = pw.chromium.launch(headless=True)
+                    launch_kwargs = {"headless": True}
+                    if self.proxy_url:
+                        launch_kwargs["proxy"] = {"server": self.proxy_url}
+                    browser = pw.chromium.launch(**launch_kwargs)
                     try:
                         page = browser.new_page()
                         page.goto(

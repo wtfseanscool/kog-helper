@@ -34,6 +34,7 @@ kog_client = KoGApiClient(
     bootstrap_browser=settings.bootstrap_browser,
     cf_clearance=settings.cf_clearance,
     php_sessid=settings.php_sessid,
+    proxy_url=settings.kog_proxy_url,
     debug=settings.debug,
 )
 

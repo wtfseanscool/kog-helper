@@ -49,6 +49,8 @@ services:
         sync: false
       - key: KOG_PHPSESSID
         sync: false
+      - key: KOG_PROXY_URL
+        sync: false
       - key: KOG_BOOTSTRAP_BROWSER
         sync: false
       - key: PLAYWRIGHT_BROWSERS_PATH

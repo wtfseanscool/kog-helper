@@ -38,6 +38,7 @@ class Settings:
     debug: bool
     cf_clearance: str | None
     php_sessid: str | None
+    kog_proxy_url: str | None
     frontend_base_url: str
     auth_redirect_base_url: str | None
     auth_secret_key: str
@@ -74,6 +75,7 @@ def get_settings() -> Settings:
         debug=_parse_bool(os.getenv("DEBUG"), False),
         cf_clearance=os.getenv("KOG_CF_CLEARANCE"),
         php_sessid=os.getenv("KOG_PHPSESSID"),
+        kog_proxy_url=os.getenv("KOG_PROXY_URL"),
         frontend_base_url=os.getenv(
             "FRONTEND_BASE_URL", "http://127.0.0.1:5173"
         ).rstrip("/"),
