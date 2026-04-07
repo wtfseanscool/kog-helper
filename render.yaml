@@ -5,7 +5,7 @@ services:
     rootDir: backend
     plan: free
     autoDeploy: true
-    buildCommand: PLAYWRIGHT_BROWSERS_PATH=0 pip install -r requirements.txt && PLAYWRIGHT_BROWSERS_PATH=0 python -m playwright install chromium
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -45,13 +45,5 @@ services:
         sync: false
       - key: DISCORD_CLIENT_SECRET
         sync: false
-      - key: KOG_CF_CLEARANCE
-        sync: false
-      - key: KOG_PHPSESSID
-        sync: false
       - key: KOG_PROXY_URL
         sync: false
-      - key: KOG_BOOTSTRAP_BROWSER
-        sync: false
-      - key: PLAYWRIGHT_BROWSERS_PATH
-        value: "0"
