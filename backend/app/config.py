@@ -75,7 +75,7 @@ def get_settings() -> Settings:
         debug=_parse_bool(os.getenv("DEBUG"), False),
         cf_clearance=os.getenv("KOG_CF_CLEARANCE"),
         php_sessid=os.getenv("KOG_PHPSESSID"),
-        kog_proxy_url=os.getenv("KOG_PROXY_URL"),
+        kog_proxy_url=(os.getenv("KOG_PROXY_URL") or "").strip() or None,
         frontend_base_url=os.getenv(
             "FRONTEND_BASE_URL", "http://127.0.0.1:5173"
         ).rstrip("/"),
