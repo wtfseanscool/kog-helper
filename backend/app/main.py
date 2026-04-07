@@ -32,8 +32,6 @@ kog_client = KoGApiClient(
     player_cache_ttl_seconds=settings.player_cache_ttl_seconds,
     player_cache_redis_url=settings.player_cache_redis_url,
     bootstrap_browser=settings.bootstrap_browser,
-    cf_clearance=settings.cf_clearance,
-    php_sessid=settings.php_sessid,
     proxy_url=settings.kog_proxy_url,
     debug=settings.debug,
 )
@@ -386,9 +384,17 @@ def auth_discord_callback(
 def get_player(player_name: str) -> dict[str, Any]:
     try:
         payload = kog_client.get_player(player_name)
+        
+        status_code = payload.get("status")
+        if status_code == 404 or payload.get("data") is None:
+            raise HTTPException(status_code=404, detail=f"Player '{player_name}' not found on kog.tw")
+            
         data = payload.get("data")
-        if not isinstance(data, dict):
-            raise KoGApiError("Unexpected player payload: missing data object")
+        # PHP json_encode outputs empty associative arrays as []
+        if isinstance(data, list) and not data:
+            data = {}
+        elif not isinstance(data, dict):
+            raise KoGApiError(f"Unexpected player payload: expected dict, got {type(data)}")
 
         return {
             "status": "ok",

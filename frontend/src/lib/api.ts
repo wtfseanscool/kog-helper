@@ -36,6 +36,8 @@ api.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     (config.headers as Record<string, string>).Authorization = `Bearer ${authToken}`;
   }
+
+
   return config;
 });
 
@@ -57,6 +59,8 @@ export function setAuthToken(token: string | null): void {
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   }
 }
+
+
 
 function toErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {

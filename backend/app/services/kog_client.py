@@ -5,7 +5,8 @@ import threading
 import time
 from typing import Any
 
-import requests
+from curl_cffi import requests
+from curl_cffi.requests.errors import RequestsError
 
 from app.services.player_cache import PlayerCacheStore
 
@@ -24,9 +25,6 @@ class KoGApiClient:
         player_cache_ttl_seconds: int = 1800,
         player_cache_redis_url: str | None = None,
         bootstrap_browser: bool = False,
-        user_agent: str = "Mozilla/5.0",
-        cf_clearance: str | None = None,
-        php_sessid: str | None = None,
         proxy_url: str | None = None,
         debug: bool = False,
     ) -> None:
@@ -45,7 +43,7 @@ class KoGApiClient:
             debug=debug,
         )
 
-        self.session = requests.Session()
+        self.session = requests.Session(impersonate="chrome120")
         self.proxy_url = proxy_url
 
         if proxy_url:
@@ -56,16 +54,10 @@ class KoGApiClient:
 
         self.session.headers.update(
             {
-                "User-Agent": user_agent,
                 "Referer": f"{self.base_url}/",
                 "Accept": "application/json, text/plain, */*",
             }
         )
-
-        if cf_clearance:
-            self._set_cookie("cf_clearance", cf_clearance)
-        if php_sessid:
-            self._set_cookie("PHPSESSID", php_sessid)
 
     def _log(self, message: str) -> None:
         if self.debug:
@@ -77,63 +69,13 @@ class KoGApiClient:
     def player_cache_info(self) -> dict[str, Any]:
         return self.player_cache.info()
 
-    def _bootstrap_cookies_with_playwright(self) -> None:
+    def _establish_cloudflare_session(self) -> None:
+        self._log("Establishing Cloudflare session via main page hit...")
         try:
-            from playwright.sync_api import sync_playwright
-        except Exception as exc:
-            raise KoGApiError(
-                "Playwright is required for bootstrap fallback. "
-                "Install with: pip install playwright && playwright install chromium"
-            ) from exc
-
-        self._log("Bootstrapping cookies via Playwright")
-
-        last_error: Exception | None = None
-        for attempt in range(3):
-            try:
-                with sync_playwright() as pw:
-                    launch_kwargs = {"headless": True}
-                    if self.proxy_url:
-                        launch_kwargs["proxy"] = {"server": self.proxy_url}
-                    browser = pw.chromium.launch(**launch_kwargs)
-                    try:
-                        page = browser.new_page()
-                        page.goto(
-                            f"{self.base_url}/",
-                            wait_until="domcontentloaded",
-                            timeout=120000,
-                        )
-                        try:
-                            page.wait_for_load_state("networkidle", timeout=30000)
-                        except Exception:
-                            # Some sessions never reach network idle due to background traffic.
-                            pass
-
-                        browser_ua = page.evaluate("navigator.userAgent")
-                        cookies = page.context.cookies()
-                    finally:
-                        browser.close()
-
-                if isinstance(browser_ua, str) and browser_ua:
-                    self.session.headers["User-Agent"] = browser_ua
-
-                for cookie in cookies:
-                    name = cookie.get("name")
-                    value = cookie.get("value")
-                    path = cookie.get("path") or "/"
-                    if isinstance(name, str) and name and isinstance(value, str):
-                        self.session.cookies.set(
-                            name, value, domain="kog.tw", path=path
-                        )
-
-                self._bootstrapped = True
-                return
-            except Exception as exc:
-                last_error = exc
-                self._log(f"Playwright bootstrap attempt {attempt + 1}/3 failed: {exc}")
-                time.sleep(1 + attempt)
-
-        raise KoGApiError(f"Playwright bootstrap failed after retries: {last_error}")
+            self.session.get(f"{self.base_url}/", timeout=self.timeout)
+            self._bootstrapped = True
+        except RequestsError as exc:
+            self._log(f"Failed to cleanly establish Cloudflare session: {exc}")
 
     def _get_nonce(self) -> str:
         endpoint = f"{self.base_url}/api.php?type=csrf-token"
@@ -143,13 +85,13 @@ class KoGApiClient:
         for attempt in range(max_attempts):
             try:
                 response = self.session.get(endpoint, timeout=self.timeout)
-            except requests.RequestException as exc:
+            except RequestsError as exc:
                 last_error = exc
                 self._log(
                     f"csrf-token request failed ({attempt + 1}/{max_attempts}): {exc}"
                 )
                 if attempt == 0 and self.bootstrap_browser:
-                    self._bootstrap_cookies_with_playwright()
+                    self._establish_cloudflare_session()
                 if attempt < max_attempts - 1:
                     time.sleep(0.5 + attempt)
                     continue
@@ -167,7 +109,7 @@ class KoGApiClient:
                         f"csrf-token parse failed ({attempt + 1}/{max_attempts}): {text[:120]}"
                     )
                     if attempt == 0 and self.bootstrap_browser:
-                        self._bootstrap_cookies_with_playwright()
+                        self._establish_cloudflare_session()
                     if attempt < max_attempts - 1:
                         time.sleep(0.5 + attempt)
                         continue
@@ -180,14 +122,14 @@ class KoGApiClient:
                     return nonce
                 last_error = KoGApiError(f"csrf-token missing nonce: {data}")
                 if attempt == 0 and self.bootstrap_browser:
-                    self._bootstrap_cookies_with_playwright()
+                    self._establish_cloudflare_session()
                 if attempt < max_attempts - 1:
                     time.sleep(0.5 + attempt)
                     continue
                 raise KoGApiError(f"csrf-token missing nonce: {data}")
 
             if attempt == 0 and self.bootstrap_browser:
-                self._bootstrap_cookies_with_playwright()
+                self._establish_cloudflare_session()
             if attempt < max_attempts - 1:
                 time.sleep(0.5 + attempt)
                 continue
@@ -206,7 +148,7 @@ class KoGApiClient:
         for attempt in range(2):
             try:
                 response = self.session.get(endpoint, timeout=self.timeout)
-            except requests.RequestException as exc:
+            except RequestsError as exc:
                 raise KoGApiError(
                     f"Request error while fetching {path}: {exc}"
                 ) from exc
@@ -214,8 +156,8 @@ class KoGApiClient:
             if response.status_code == 200 and body:
                 return body
 
-            if attempt == 0 and self.bootstrap_browser:
-                self._bootstrap_cookies_with_playwright()
+            if attempt == 0:
+                self._establish_cloudflare_session()
                 continue
 
             raise KoGApiError(
@@ -253,7 +195,7 @@ class KoGApiClient:
                         json=request_payload,
                         timeout=self.timeout,
                     )
-                except requests.RequestException as exc:
+                except RequestsError as exc:
                     if attempt < max_attempts - 1:
                         self._log(
                             f"api.php request failed ({attempt + 1}/{max_attempts}): {exc}"
@@ -266,18 +208,9 @@ class KoGApiClient:
                 body = response.text.strip()
 
                 if not body:
-                    if attempt == 0 and self.bootstrap_browser:
-                        self._bootstrap_cookies_with_playwright()
-                        continue
-                    if attempt < max_attempts - 1:
-                        self._log(
-                            f"api.php returned empty body ({attempt + 1}/{max_attempts}); retrying"
-                        )
-                        time.sleep(0.5 + attempt)
-                        continue
-                    raise KoGApiError(
-                        "Empty response from api.php (stale nonce or blocked session)."
-                    )
+                    # The kog.tw API returns an empty body if the player isn't found.
+                    # Since we fetch a fresh nonce right before this, we assume it's just missing data.
+                    return {"status": 404, "data": None}
 
                 try:
                     data = response.json()
