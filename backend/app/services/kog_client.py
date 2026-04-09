@@ -25,7 +25,7 @@ class KoGApiClient:
         player_cache_ttl_seconds: int = 1800,
         player_cache_redis_url: str | None = None,
         bootstrap_browser: bool = False,
-        proxy_url: str | None = None,
+        proxy_urls: list[str] | None = None,
         debug: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -43,14 +43,11 @@ class KoGApiClient:
             debug=debug,
         )
 
-        self.session = requests.Session(impersonate="chrome120")
-        self.proxy_url = proxy_url
+        self._proxy_urls = list(proxy_urls) if proxy_urls else []
+        self._proxy_index = 0
 
-        if proxy_url:
-            self.session.proxies = {
-                "http": proxy_url,
-                "https": proxy_url,
-            }
+        self.session = requests.Session(impersonate="chrome120")
+        self._apply_current_proxy()
 
         self.session.headers.update(
             {
@@ -58,6 +55,26 @@ class KoGApiClient:
                 "Accept": "application/json, text/plain, */*",
             }
         )
+
+    def _apply_current_proxy(self) -> None:
+        """Set the session proxy to the current proxy in the pool (or none)."""
+        if self._proxy_urls:
+            url = self._proxy_urls[self._proxy_index % len(self._proxy_urls)]
+            self.session.proxies = {"http": url, "https": url}
+            self._log(f"Using proxy: {url}")
+        else:
+            self.session.proxies = {}
+
+    def _rotate_proxy(self) -> bool:
+        """Advance to the next proxy. Returns True if a new proxy is available."""
+        if not self._proxy_urls:
+            return False
+        self._proxy_index = (self._proxy_index + 1) % len(self._proxy_urls)
+        self._apply_current_proxy()
+        # Reset session cookies so the new proxy gets a fresh Cloudflare session
+        self.session.cookies.clear()
+        self._bootstrapped = False
+        return True
 
     def _log(self, message: str) -> None:
         if self.debug:
@@ -80,66 +97,67 @@ class KoGApiClient:
     def _get_nonce(self) -> str:
         endpoint = f"{self.base_url}/api.php?type=csrf-token"
         max_attempts = 4
+        proxies_to_try = max(len(self._proxy_urls), 1)
         last_error: Exception | None = None
 
-        for attempt in range(max_attempts):
-            try:
-                response = self.session.get(endpoint, timeout=self.timeout)
-            except RequestsError as exc:
-                last_error = exc
-                self._log(
-                    f"csrf-token request failed ({attempt + 1}/{max_attempts}): {exc}"
-                )
-                if attempt == 0 and self.bootstrap_browser:
-                    self._establish_cloudflare_session()
-                if attempt < max_attempts - 1:
-                    time.sleep(0.5 + attempt)
-                    continue
-                raise KoGApiError(
-                    f"Request error while fetching csrf-token: {exc}"
-                ) from exc
-            text = response.text.strip()
-
-            if text:
+        for _proxy_round in range(proxies_to_try):
+            for attempt in range(max_attempts):
                 try:
-                    data = response.json()
-                except Exception as exc:
+                    response = self.session.get(endpoint, timeout=self.timeout)
+                except RequestsError as exc:
                     last_error = exc
                     self._log(
-                        f"csrf-token parse failed ({attempt + 1}/{max_attempts}): {text[:120]}"
+                        f"csrf-token request failed ({attempt + 1}/{max_attempts}): {exc}"
                     )
-                    if attempt == 0 and self.bootstrap_browser:
+                    if attempt == 0:
                         self._establish_cloudflare_session()
                     if attempt < max_attempts - 1:
                         time.sleep(0.5 + attempt)
                         continue
-                    raise KoGApiError(
-                        f"Could not parse csrf-token JSON: {text[:160]}"
-                    ) from exc
+                    # All attempts exhausted on this proxy – try next
+                    break
+                text = response.text.strip()
 
-                nonce = data.get("nonce")
-                if isinstance(nonce, str) and nonce:
-                    return nonce
-                last_error = KoGApiError(f"csrf-token missing nonce: {data}")
-                if attempt == 0 and self.bootstrap_browser:
+                if text:
+                    try:
+                        data = response.json()
+                    except Exception as exc:
+                        last_error = exc
+                        self._log(
+                            f"csrf-token parse failed ({attempt + 1}/{max_attempts}): {text[:120]}"
+                        )
+                        if attempt == 0:
+                            self._establish_cloudflare_session()
+                        if attempt < max_attempts - 1:
+                            time.sleep(0.5 + attempt)
+                            continue
+                        break
+
+                    nonce = data.get("nonce")
+                    if isinstance(nonce, str) and nonce:
+                        return nonce
+                    last_error = KoGApiError(f"csrf-token missing nonce: {data}")
+                    if attempt == 0:
+                        self._establish_cloudflare_session()
+                    if attempt < max_attempts - 1:
+                        time.sleep(0.5 + attempt)
+                        continue
+                    break
+
+                if attempt == 0:
                     self._establish_cloudflare_session()
                 if attempt < max_attempts - 1:
                     time.sleep(0.5 + attempt)
                     continue
-                raise KoGApiError(f"csrf-token missing nonce: {data}")
+                break
 
-            if attempt == 0 and self.bootstrap_browser:
-                self._establish_cloudflare_session()
-            if attempt < max_attempts - 1:
-                time.sleep(0.5 + attempt)
-                continue
+            # This proxy failed – rotate if possible
+            if not self._rotate_proxy():
+                break
+            self._log("Rotated to next proxy, retrying nonce acquisition...")
+            self._establish_cloudflare_session()
 
-            raise KoGApiError(
-                "Empty csrf-token response. Set KOG_CF_CLEARANCE/KOG_PHPSESSID "
-                "or enable bootstrap_browser."
-            )
-
-        raise KoGApiError(f"Unable to get nonce after retries: {last_error}")
+        raise KoGApiError(f"Unable to get nonce after trying all proxies: {last_error}")
 
     def fetch_page_html(self, page_id: str) -> str:
         path = f"/get.php?p={page_id}"

@@ -24,6 +24,34 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _parse_proxy_urls(raw: str) -> list[str]:
+    """Parse a comma-separated list of proxy URLs.
+
+    Accepts two formats per entry:
+      - Standard URL:  http://user:pass@ip:port
+      - Compact:       ip:port:user:pass
+
+    Returns a list of ``http://user:pass@ip:port`` strings.
+    """
+    urls: list[str] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry.startswith("http://") or entry.startswith("https://"):
+            urls.append(entry)
+        else:
+            # Compact format: ip:port:user:pass
+            parts = entry.split(":")
+            if len(parts) == 4:
+                ip, port, user, passwd = parts
+                urls.append(f"http://{user}:{passwd}@{ip}:{port}")
+            else:
+                # Best-effort: treat as-is
+                urls.append(f"http://{entry}")
+    return urls
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
@@ -38,7 +66,7 @@ class Settings:
     debug: bool
     cf_clearance: str | None
     php_sessid: str | None
-    kog_proxy_url: str | None
+    kog_proxy_urls: list[str]
     frontend_base_url: str
     auth_redirect_base_url: str | None
     auth_secret_key: str
@@ -75,7 +103,9 @@ def get_settings() -> Settings:
         debug=_parse_bool(os.getenv("DEBUG"), False),
         cf_clearance=os.getenv("KOG_CF_CLEARANCE"),
         php_sessid=os.getenv("KOG_PHPSESSID"),
-        kog_proxy_url=(os.getenv("KOG_PROXY_URL") or "").strip() or None,
+        kog_proxy_urls=_parse_proxy_urls(
+            os.getenv("KOG_PROXY_URLS") or os.getenv("KOG_PROXY_URL") or ""
+        ),
         frontend_base_url=os.getenv(
             "FRONTEND_BASE_URL", "http://127.0.0.1:5173"
         ).rstrip("/"),

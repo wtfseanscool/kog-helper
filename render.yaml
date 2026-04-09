@@ -45,5 +45,5 @@ services:
         sync: false
       - key: DISCORD_CLIENT_SECRET
         sync: false
-      - key: KOG_PROXY_URL
+      - key: KOG_PROXY_URLS
         sync: false

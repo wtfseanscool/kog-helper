@@ -32,7 +32,7 @@ kog_client = KoGApiClient(
     player_cache_ttl_seconds=settings.player_cache_ttl_seconds,
     player_cache_redis_url=settings.player_cache_redis_url,
     bootstrap_browser=settings.bootstrap_browser,
-    proxy_url=settings.kog_proxy_url,
+    proxy_urls=settings.kog_proxy_urls,
     debug=settings.debug,
 )
 
